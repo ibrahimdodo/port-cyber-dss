@@ -1,0 +1,16 @@
+# AIS archives are hundreds of MB per day -- never commit them.
+data/
+*.zip
+*.csv
+!tests/**/*.csv
+
+# Derived artefacts are cheap to regenerate.
+*.parquet
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.DS_Store
+.ipynb_checkpoints/
