@@ -249,6 +249,7 @@ def detect_port_calls(
     min_duration_hours: float = 1.0,
     max_gap_minutes: float = 30.0,
     window: tuple[dt.datetime, dt.datetime] | None = None,
+    boundary_tolerance_minutes: float = 5.0,
 ) -> pd.DataFrame:
     """Reconstruct port calls from filtered AIS points.
 
@@ -275,6 +276,14 @@ def detect_port_calls(
         min and max timestamp, which is right for a full day but wrong for a
         sparse extract, where the last vessel present would otherwise always
         appear clipped simply for being last.
+    boundary_tolerance_minutes
+        How close to a window edge a call must start or end to count as clipped
+        by it. Must exceed the AIS reporting interval: ITU-R M.1371 has a moored
+        Class A vessel transmitting every 3 minutes, so a vessel already
+        alongside at midnight may not produce its first message until 00:02:59.
+        A tolerance below that misclassifies genuinely truncated calls as
+        complete, which contaminates dwell statistics with full-day stays
+        masquerading as measured ones. 5 minutes clears the interval with margin.
 
     Returns
     -------
@@ -322,6 +331,7 @@ def detect_port_calls(
     else:
         day_start = points["timestamp"].min()
         day_end = points["timestamp"].max()
+    tolerance_s = boundary_tolerance_minutes * 60.0
 
     def _first_valid(series: pd.Series):
         cleaned = series.dropna()
@@ -350,10 +360,11 @@ def detect_port_calls(
                 "width": _first_valid(run["width"]) if "width" in run else pd.NA,
                 "draught": _first_valid(run["draught"]) if "draught" in run else pd.NA,
                 "destination": _first_valid(run["destination"]) if "destination" in run else pd.NA,
-                # Within one minute of the file boundary the call is very likely
-                # clipped rather than genuinely starting or ending there.
-                "truncated_start": (arrival - day_start).total_seconds() < 60,
-                "truncated_end": (day_end - departure).total_seconds() < 60,
+                # Near the window edge the call is very likely clipped rather
+                # than genuinely starting or ending there. See the parameter
+                # docs: the tolerance must exceed the AIS reporting interval.
+                "truncated_start": (arrival - day_start).total_seconds() < tolerance_s,
+                "truncated_end": (day_end - departure).total_seconds() < tolerance_s,
             }
         )
 
@@ -361,6 +372,125 @@ def detect_port_calls(
     if not calls.empty:
         calls = calls.sort_values(["port", "arrival"]).reset_index(drop=True)
     return calls
+
+
+def reflag_truncation(
+    calls: pd.DataFrame, *, boundary_tolerance_minutes: float = 5.0
+) -> pd.DataFrame:
+    """Recompute truncation flags on an existing call table.
+
+    The flags are a pure function of each call's arrival and departure against
+    its own day boundary, both of which the stored table already carries. That
+    makes a tolerance change repairable in place, without re-downloading and
+    re-processing hundreds of gigabytes of raw AIS.
+
+    Requires a ``date`` column identifying the daily window each call came from.
+    """
+    required = {"date", "arrival", "departure"}
+    missing = required - set(calls.columns)
+    if missing:
+        raise ValueError(f"reflag_truncation needs columns: {sorted(missing)}")
+    if calls.empty:
+        return calls.copy()
+
+    out = calls.copy()
+    day = pd.to_datetime(out["date"]).dt.normalize()
+    tolerance = pd.Timedelta(minutes=boundary_tolerance_minutes)
+
+    out["truncated_start"] = (out["arrival"] - day) < tolerance
+    # The daily window ends at 23:59:59.999999, so compare against the next
+    # midnight less one microsecond rather than against midnight itself.
+    day_end = day + pd.Timedelta(days=1) - pd.Timedelta(microseconds=1)
+    out["truncated_end"] = (day_end - out["departure"]) < tolerance
+    return out
+
+
+def stitch_across_days(
+    calls: pd.DataFrame, *, require_adjacent_days: bool = True
+) -> pd.DataFrame:
+    """Rejoin calls that a daily file boundary split in two.
+
+    DMA publishes one file per day, so a vessel alongside for three days is
+    detected as three separate ~24 h calls. That systematically truncates the
+    upper tail of the dwell distribution -- the p90 pins at 23.9 h not because
+    berths free up daily but because the observation window ends. Long stays
+    are exactly the ones that dominate berth-occupancy economics, so leaving
+    this uncorrected would understate how long a berth is genuinely committed.
+
+    Two calls are joined when they concern the same vessel at the same port,
+    the earlier one was clipped at its end, the later one was clipped at its
+    start, and (by default) they fall on consecutive days. Chains of any length
+    collapse into a single call.
+
+    Parameters
+    ----------
+    require_adjacent_days
+        Demand that the two calls sit on consecutive dates. Keep this on when
+        the input has gaps -- our seasonal weeks are separated by months, and
+        without the check a vessel clipped at the end of the autumn week would
+        be joined to one clipped at the start of the winter week.
+
+    Caveat worth stating in the write-up: a vessel that genuinely departs at
+    23:58 and returns at 00:03 is indistinguishable from one that never left,
+    and will be merged. For berth-occupancy purposes that is the right answer
+    anyway -- the berth was committed throughout.
+    """
+    required = {"port", "mmsi", "arrival", "departure", "truncated_start", "truncated_end"}
+    missing = required - set(calls.columns)
+    if missing:
+        raise ValueError(f"stitch_across_days needs columns: {sorted(missing)}")
+
+    if calls.empty:
+        return calls.copy()
+
+    df = calls.sort_values(["port", "mmsi", "arrival"]).reset_index(drop=True)
+
+    same_vessel = (df["port"] == df["port"].shift()) & (df["mmsi"] == df["mmsi"].shift())
+    previous_clipped_at_end = df["truncated_end"].shift(fill_value=False).astype(bool)
+    this_clipped_at_start = df["truncated_start"].astype(bool)
+
+    if require_adjacent_days:
+        gap_days = (
+            df["arrival"].dt.normalize() - df["departure"].shift().dt.normalize()
+        ).dt.days
+        adjacent = gap_days == 1
+    else:
+        adjacent = pd.Series(True, index=df.index)
+
+    continues = same_vessel & previous_clipped_at_end & this_clipped_at_start & adjacent
+    chain = (~continues.fillna(False)).cumsum()
+
+    if chain.nunique() == len(df):
+        return df  # nothing to join
+
+    def _first_valid(series: pd.Series):
+        cleaned = series.dropna()
+        return cleaned.iloc[0] if len(cleaned) else pd.NA
+
+    records = []
+    for _, group in df.groupby(chain, sort=False):
+        first, last = group.iloc[0], group.iloc[-1]
+        merged = {
+            "port": first["port"],
+            "mmsi": first["mmsi"],
+            "arrival": first["arrival"],
+            "departure": last["departure"],
+            # Measured end to end, so the silence across midnight is included
+            # rather than dropped along with the boundary.
+            "dwell_hours": (last["departure"] - first["arrival"]).total_seconds() / 3600.0,
+            "n_messages": int(group["n_messages"].sum()) if "n_messages" in group else pd.NA,
+            "truncated_start": bool(first["truncated_start"]),
+            "truncated_end": bool(last["truncated_end"]),
+            "days_spanned": len(group),
+        }
+        for column in ("name", "ship_type", "cargo_type", "length", "width",
+                       "draught", "destination", "date", "season"):
+            if column in group.columns:
+                merged[column] = _first_valid(group[column])
+        records.append(merged)
+
+    stitched = pd.DataFrame.from_records(records)
+    return stitched.sort_values(["port", "arrival"]).reset_index(drop=True)
 
 
 def summarise_calls(calls: pd.DataFrame) -> pd.DataFrame:

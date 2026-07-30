@@ -56,6 +56,79 @@ Context changed from the original assignment framing — **this is now a solo, u
 
 Also evaluated and rejected: [AegeaNET Syros AIS](https://zenodo.org/records/18926663) (Univ. of the Aegean, Jul–Sep 2024, 170 MB, well documented with a description PDF) — clean and citable, but Aegean coverage, so it breaks the Baltic framing.
 
+5d. **Day-one validation result (run 2026-07-30 against 2026-07-25 data).** Downloaded `aisdk-2026-07-25.zip` (709 MB → 3.46 GB CSV), scanned **19,531,377 rows**, kept 282,075 points across the four candidate ports. Findings:
+- **Bornholm coverage confirmed** — 49,634 AIS points and 51 detected calls at Rønne on a single day. The anchor-port assumption holds; this was the one thing that could have invalidated the dataset choice.
+- **Parsing matches the readme** — dayfirst `%d/%m/%Y %H:%M:%S` timestamps, period decimals, comma delimiter. Zero unparseable timestamps. The readme's "57,8794" latitude example is documentation style, not file content.
+- **The Bornholmslinjen fleet is visible and correctly resolved**: HAMMERSHUS 03:45→05:51 and 13:01→14:53 (~2 h turnarounds), POVL ANKER 00:01→07:50 and 16:16→23:59, EXPRESS 1 and EXPRESS 5 (HSC catamarans) with multiple rotations each. Multi-call-per-day splitting works; the 30-minute gap tolerance and 1-hour minimum are correctly tuned for this port (shortest real ferry call observed: 1.49 h).
+- **Bounding box was capturing the marina.** 29 of 50 vessels were sailing/pleasure craft. The data showed a clean spatial split — commercial berths at lat 55.0875–55.0994, recreational at 55.1033–55.1056 — so `RONNE.lat_max` was cut from 55.120 to **55.100**. Effect: 50 → 26 vessels, and commercial share of calls rose from 29% to 58%. Recreational traffic contributes nothing to port revenue and would have distorted any €/hour calibration built on vessel counts.
+- **Offshore-wind signature present**: AEOLUS (a well-known offshore wind installation vessel) alongside for the full day, consistent with Rønne's Krigers Flak / Baltic Eagle role — supporting the "mixed traffic" persona claim with evidence rather than assertion.
+- **Open calibration question**: ~15 commercial calls/day extrapolates to ~5,500/yr against Rønne's published ~3,000. Late July is peak season and port statistics likely count arrivals rather than each stationary period. Reconciling our detected-call definition against the published figure is a required step before €/call calibration — and is itself a good validation exercise for the report.
+
+5e. **Calibration anchors secured (2026-07-30).** Two authoritative sources now in `refs/`, replacing every secondary figure used until now.
+
+**Danmarks Statistik, table SKIB101** (`HAVN=00315` Rønne Havn) — official annual port statistics, queried live via the DST API (reproducible, no scraping):
+
+| | 2018 | 2020 | 2022 | 2023 | 2024 | 2025 |
+|---|---|---|---|---|---|---|
+| Ships calling at port | 3,015 | 3,023 | 3,137 | 3,014 | 3,043 | 2,933 |
+| Goods throughput (1000 t) | 1,522 | 1,338 | 1,316 | 1,198 | 1,415 | 1,368 |
+| Passengers (1000) | 1,671 | 1,616 | 1,948 | 1,994 | 2,006 | 2,036 |
+
+This is the reconciliation baseline: **~8.0–8.3 calls/day annual average**. Note the series is remarkably stable across COVID, which makes it a trustworthy denominator.
+
+**Rønne Havn A/S annual report 2024** (five-year key figures, DKK thousands): net revenue **169,814** (up 34.9% on 2023, doubled in five years), EBITDA **101,670**, EBIT 78,650, profit 62,630. 2024 detail: 56 cruise calls (69,052 cruise passengers), bulk tonnage +24.2%, ship calls −2.8% while gross tonnage +3.3% (vessels getting larger), 350,000 m² project area now supporting two simultaneous offshore wind projects.
+
+**First-cut €/hour**, to be refined in the consequence phase: revenue DKK 169.8M ≈ **€22.8M/yr** → ~€2,600/h against 8,760 h, or ~€3,900/h against 5,840 service hours. EBITDA-based (arguably the truer marginal loss, since an outage does not avoid fixed costs) → ~€1,550–2,330/h. The `demo_risk.py` placeholder PERT(800, 2500, 9000) brackets this correctly, which is a useful sanity check but not a substitute for doing the derivation properly.
+
+**A finding that sharpens the whole premise — Rønne Havn A/S employs 34 FTE** (2024, up from 27 in 2020). That is *below* NIS2's medium-enterprise threshold, so on size alone the port would fall outside scope. But it is the sole supply port for Bornholm's island population, which brings it squarely within **NIS2 Article 2(2)(b)** — entities that are the sole provider in a Member State of a service essential to critical societal or economic activities are in scope *regardless of size*. Rønne is therefore a textbook case of exactly the organisation this DSS is for: legally obligated, operationally critical, and far too small to run a security function. This is the case-study framing for the report.
+
+**Persona note:** at 34 FTE the port *company* sits between the 10 and 50 personas, not at 100. The 100-employee persona remains defensible as the port **ecosystem** (port company + stevedores + ferry operator staff + agents + offshore contractors sharing the IT/OT estate), but the report must state which boundary it is using. Recommendation: run the analysis at the 50 persona for the port company as NIS2 duty-holder, and show the 100 ecosystem case as a sensitivity — the persona sweep was already planned, so this costs nothing and directly strengthens the scoping argument.
+
+5f. **Seasonal dataset built and reconciled (2026-07-30/31).** Four full Mon–Sun weeks — autumn 2025-10-13, winter 2026-01-19, spring 2026-04-13, summer 2026-07-20 — 28 days, ~18 GB downloaded and discarded, **3,189 calls** retained as parquet (~500 kB). Peak disk stayed ~4 GB via download→process→delete per day; the run is resumable and skips days already processed.
+
+**Seasonality is real and large.** Rønne commercial calls/day: winter **7.9**, spring 8.9, autumn 11.9, summer **12.3** — a **1.56× swing**. Autumn nearly matches summer, consistent with offshore-wind installation campaigns running in the workable shoulder season rather than tourist season. A consequence model calibrated on July alone would overstate January risk by ~55%, which retrospectively justifies sampling four weeks instead of extrapolating from day one.
+
+**Reconciliation against DST SKIB101** — mean 10.2 commercial calls/day → naive annualisation **3,728** vs official **3,043** (2024) / **2,933** (2025) = **1.23–1.27×**. That is close agreement for an independently derived measure, and the residual is explained rather than mysterious: our detector counts each stationary period, so a vessel shifting berth or making two rotations in a day counts twice, while the official series counts arrivals. Treat ~1.25× as a documented scaling factor for euro calibration.
+
+**Dwell distributions — the consequence model's three-point inputs, now data-derived** (complete Rønne commercial calls):
+
+| ship type | n | mean | median | p10 | p90 |
+|---|---|---|---|---|---|
+| Cargo | 32 | 10.83 | 7.54 | 3.31 | 19.28 |
+| HSC | 84 | 7.38 | 4.38 | 1.63 | 23.90 |
+| Passenger | 63 | 9.14 | 9.01 | 1.88 | 23.95 |
+| Tanker | 10 | 19.11 | 23.93 | 10.38 | 23.95 |
+
+Read as PERT(p10, median, p90) these replace guessed outage durations with observed berth-occupancy — an outage exceeding the p90 dwell is one that starts turning vessels away rather than merely delaying them.
+
+**Known limitation to fix next: single-day windows clip multi-day stays.** The p90s pinned at ~23.9 h are hitting the 24-hour ceiling, not a real berth pattern — a vessel alongside for three days appears as three ~24 h calls. Since each season is seven *consecutive* days, stitching calls across day boundaries is straightforward and would materially improve the Tanker and long-stay figures. Do this before the euro calibration.
+
+**Bug found and fixed during reconciliation.** `aggregate()` globbed `portcalls-*.parquet`, which matched the combined `portcalls-all.parquet` it had written on a previous run, double-counting every call (10.2 → 20.4 calls/day, ratio 2.45×). Caught only because the official DST baseline made the inflated figure obviously wrong — a good argument for keeping an external ground truth wired into the pipeline rather than eyeballing outputs.
+
+5g. **Dwell correction and €/hour derivation (2026-07-31).** Two defects fixed and the placeholder cost replaced with a derived figure.
+
+**Defect 1 — truncation tolerance was tighter than AIS itself.** `detect_port_calls` flagged a call as clipped only if it started within 60 s of the window edge. ITU-R M.1371 has a *moored* Class A vessel transmitting every 3 minutes, so a ship already alongside at midnight often produced its first message at 00:02:xx and was recorded as a genuine arrival. Symptom: a spike of 97 arrivals in hour 00 and a dwell p90 pinned at 23.9 h — full-day stays masquerading as measured ones. Tolerance is now a documented parameter defaulting to **5 minutes**. Because the flags are a pure function of stored timestamps, `reflag_truncation()` repairs existing data in place — no re-download of 18 GB.
+
+**Defect 2 — daily files split multi-day stays.** `stitch_across_days()` rejoins calls where one is clipped at its end, the next is clipped at its start, same vessel, same port, consecutive days. Chains of any length collapse. Adjacency is enforced so a vessel clipped at the end of the autumn week is not joined to one clipped at the start of the winter week.
+
+**Effect on the dwell distributions** (Rønne, complete commercial calls) — the 24 h ceiling disappears and the ferry signal emerges:
+
+| ship type | median before | median after | p10 | p90 | max |
+|---|---|---|---|---|---|
+| Cargo | 7.54 | **16.44** | 2.93 | 43.38 | 58.79 |
+| HSC | 4.38 | **6.63** | 1.65 | 18.69 | 71.55 |
+| Passenger | 9.01 | **2.70** | 1.87 | 11.12 | 33.37 |
+
+Passenger median falling to 2.70 h is the strongest validation yet — that is a real ropax turnaround, matching the ~2 h HAMMERSHUS calls observed directly on day one. The old 9.01 h was contamination from vessels present all day. 66 commercial stays now span more than one day, the longest 168 h.
+
+**Reconciliation, corrected and stronger.** On the stitched basis: commercial **2,203/yr**, all vessels **4,993/yr**. The official DST figures (3,043 in 2024, 2,933 in 2025) fall *inside* that bracket. Bracketing is a better result than a single ratio: the official series evidently counts more than our strict commercial set (fishing, tugs, service craft) but excludes the recreational traffic the all-vessel count picks up. Seasonality on the corrected basis is stronger still — winter 4.0 to summer 7.9 commercial calls/day, a **1.96× swing**.
+
+**€/hour derived, replacing the placeholder** (`risk/economics.py`). From Rønne Havn's 2024 accounts: revenue **€22.76M**, EBITDA margin 60%, **€7,480 revenue per call**. Two documented reductions, both distributions rather than points: *call-dependent share* PERT(0.45, 0.60, 0.80) — land and project-area rental is billed on time and continues during an outage; *unrecoverable share* PERT(0.20, 0.40, 0.70) — ferry and bulk traffic largely catches up, as Nagoya and DP World both did. Result: **€659/h mean (P10 €451, P90 €883)**, against 8,760 service hours (Rønne is genuinely 24-hour because Bornholmslinjen sails overnight, though 67% of commercial arrivals fall between 06:00 and 22:00).
+
+Validated by two independent routes: annual-revenue-over-hours and revenue-per-call × call rate agree to **ratio 1.00** on a matched call basis. An arithmetic bug in the cross-check (converting daily to hourly with ×24 instead of ×365/service_hours, a 15× error) was caught precisely because the two routes disagreed — the cross-check earning its keep on its first use.
+
+**The derived figure changes the answer, and that is the point.** At the €2,500/h placeholder, MSP ransomware (S2) ranked first. At the derived €659/h, **SaaS account takeover leading to invoice fraud (S3) overtakes it** — €33.3k ALE versus €27.8k. The reason is structural: a small port's hourly revenue is modest, so downtime-driven scenarios carry less weight than a direct unrecoverable cash loss. A qualitative matrix would almost certainly have rated ransomware "critical" and business email compromise "medium". This is the concrete example of quantitative assessment overturning intuition that the report needs.
+
 6. **Scope reshaped for solo build** — vertical slice first: 100-mixed persona, ~10 vendors, 7 scenarios, full pipeline (inventory → likelihood → consequence → Monte Carlo → optimizer → dashboard). **Backlog (build only after the slice works end-to-end):** awareness module, SimPy outage simulation, 10/50 persona calibration, SBOM ingestion.
 7. **Portfolio-grade deliverable standards**: README as the report (architecture diagram, methodology, screenshots), reproducible pipeline (scripts + one bundled sample-day extract so others can run without the 17 GB download), tests on the Monte Carlo core and optimizer, deployed demo on HF Spaces.
 

@@ -10,7 +10,13 @@ import unittest
 
 import pandas as pd
 
-from portscra.ais.portcalls import detect_port_calls, normalise_column, summarise_calls
+from portscra.ais.portcalls import (
+    detect_port_calls,
+    normalise_column,
+    reflag_truncation,
+    stitch_across_days,
+    summarise_calls,
+)
 from portscra.ais.ports import RONNE, find_port, union_bounds
 
 BASE = dt.datetime(2026, 3, 2, 0, 0, 0)
@@ -187,3 +193,153 @@ class TestSummary(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestStitchAcrossDays(unittest.TestCase):
+    """Daily files split long stays; stitching rejoins them."""
+
+    @staticmethod
+    def call(mmsi, arrival, departure, *, tstart, tend, port="ronne",
+             ship_type="Cargo", n=100):
+        return {
+            "port": port, "mmsi": mmsi, "name": "TEST", "ship_type": ship_type,
+            "cargo_type": None, "arrival": arrival, "departure": departure,
+            "dwell_hours": (departure - arrival).total_seconds() / 3600,
+            "n_messages": n, "length": 120.0, "width": 20.0, "draught": 5.5,
+            "destination": "DKRNN", "truncated_start": tstart, "truncated_end": tend,
+        }
+
+    def frame(self, *rows):
+        return pd.DataFrame.from_records(list(rows))
+
+    def test_joins_a_stay_split_over_two_days(self):
+        d1 = dt.datetime(2026, 3, 2)
+        d2 = dt.datetime(2026, 3, 3)
+        df = self.frame(
+            self.call("1", d1 + dt.timedelta(hours=6), d1 + dt.timedelta(hours=23, minutes=59),
+                      tstart=False, tend=True),
+            self.call("1", d2, d2 + dt.timedelta(hours=10), tstart=True, tend=False),
+        )
+        out = stitch_across_days(df)
+        self.assertEqual(len(out), 1)
+        row = out.iloc[0]
+        # 06:00 day 1 to 10:00 day 2 = 28 hours, well past the 24 h ceiling
+        self.assertAlmostEqual(row["dwell_hours"], 28.0, delta=0.02)
+        self.assertFalse(row["truncated_start"])
+        self.assertFalse(row["truncated_end"])
+        self.assertEqual(row["days_spanned"], 2)
+        self.assertEqual(row["n_messages"], 200)
+
+    def test_collapses_a_chain_of_three_days(self):
+        days = [dt.datetime(2026, 3, d) for d in (2, 3, 4)]
+        df = self.frame(
+            self.call("1", days[0] + dt.timedelta(hours=8),
+                      days[0] + dt.timedelta(hours=23, minutes=59), tstart=False, tend=True),
+            self.call("1", days[1], days[1] + dt.timedelta(hours=23, minutes=59),
+                      tstart=True, tend=True),
+            self.call("1", days[2], days[2] + dt.timedelta(hours=4), tstart=True, tend=False),
+        )
+        out = stitch_across_days(df)
+        self.assertEqual(len(out), 1)
+        self.assertAlmostEqual(out.iloc[0]["dwell_hours"], 44.0, delta=0.02)
+        self.assertEqual(out.iloc[0]["days_spanned"], 3)
+
+    def test_does_not_join_non_adjacent_days(self):
+        """Our seasonal weeks are months apart -- a vessel clipped at the end of
+        one week must not be joined to one clipped at the start of the next."""
+        a = dt.datetime(2025, 10, 19)
+        b = dt.datetime(2026, 1, 19)
+        df = self.frame(
+            self.call("1", a + dt.timedelta(hours=6), a + dt.timedelta(hours=23, minutes=59),
+                      tstart=False, tend=True),
+            self.call("1", b, b + dt.timedelta(hours=10), tstart=True, tend=False),
+        )
+        self.assertEqual(len(stitch_across_days(df)), 2)
+
+    def test_does_not_join_different_vessels(self):
+        d1 = dt.datetime(2026, 3, 2)
+        d2 = dt.datetime(2026, 3, 3)
+        df = self.frame(
+            self.call("1", d1 + dt.timedelta(hours=6), d1 + dt.timedelta(hours=23, minutes=59),
+                      tstart=False, tend=True),
+            self.call("2", d2, d2 + dt.timedelta(hours=10), tstart=True, tend=False),
+        )
+        self.assertEqual(len(stitch_across_days(df)), 2)
+
+    def test_does_not_join_when_the_boundary_is_clean(self):
+        """A vessel that genuinely sailed before midnight stays separate."""
+        d1 = dt.datetime(2026, 3, 2)
+        d2 = dt.datetime(2026, 3, 3)
+        df = self.frame(
+            self.call("1", d1 + dt.timedelta(hours=6), d1 + dt.timedelta(hours=18),
+                      tstart=False, tend=False),
+            self.call("1", d2 + dt.timedelta(hours=2), d2 + dt.timedelta(hours=10),
+                      tstart=False, tend=False),
+        )
+        self.assertEqual(len(stitch_across_days(df)), 2)
+
+    def test_does_not_join_across_ports(self):
+        d1 = dt.datetime(2026, 3, 2)
+        d2 = dt.datetime(2026, 3, 3)
+        df = self.frame(
+            self.call("1", d1 + dt.timedelta(hours=6), d1 + dt.timedelta(hours=23, minutes=59),
+                      tstart=False, tend=True, port="ronne"),
+            self.call("1", d2, d2 + dt.timedelta(hours=10), tstart=True, tend=False, port="koge"),
+        )
+        self.assertEqual(len(stitch_across_days(df)), 2)
+
+    def test_untouched_frame_when_nothing_to_join(self):
+        d1 = dt.datetime(2026, 3, 2)
+        df = self.frame(
+            self.call("1", d1 + dt.timedelta(hours=6), d1 + dt.timedelta(hours=12),
+                      tstart=False, tend=False),
+        )
+        self.assertEqual(len(stitch_across_days(df)), 1)
+
+    def test_empty_frame(self):
+        empty = pd.DataFrame(columns=["port", "mmsi", "arrival", "departure",
+                                      "truncated_start", "truncated_end"])
+        self.assertTrue(stitch_across_days(empty).empty)
+
+    def test_rejects_missing_columns(self):
+        with self.assertRaises(ValueError):
+            stitch_across_days(pd.DataFrame({"port": ["ronne"]}))
+
+
+class TestReflagTruncation(unittest.TestCase):
+    """Truncation flags are derivable from timestamps, so a tolerance change is
+    repairable in place rather than requiring a re-download."""
+
+    def frame(self, arrival, departure, date):
+        return pd.DataFrame([{
+            "port": "ronne", "mmsi": "1", "date": pd.Timestamp(date),
+            "arrival": pd.Timestamp(arrival), "departure": pd.Timestamp(departure),
+            "truncated_start": False, "truncated_end": False,
+        }])
+
+    def test_flags_a_vessel_present_at_midnight(self):
+        """A moored Class A vessel reports every 3 minutes, so its first message
+        of the day can be at 00:02:59 -- that is a truncated call, not one that
+        happened to arrive just after midnight."""
+        df = self.frame("2026-03-02 00:02:30", "2026-03-02 14:00:00", "2026-03-02")
+        out = reflag_truncation(df)
+        self.assertTrue(out.iloc[0]["truncated_start"])
+        self.assertFalse(out.iloc[0]["truncated_end"])
+
+    def test_a_genuine_early_arrival_is_not_flagged(self):
+        df = self.frame("2026-03-02 00:30:00", "2026-03-02 14:00:00", "2026-03-02")
+        self.assertFalse(reflag_truncation(df).iloc[0]["truncated_start"])
+
+    def test_flags_a_vessel_still_alongside_at_end_of_day(self):
+        df = self.frame("2026-03-02 08:00:00", "2026-03-02 23:57:00", "2026-03-02")
+        self.assertTrue(reflag_truncation(df).iloc[0]["truncated_end"])
+
+    def test_tolerance_is_configurable(self):
+        df = self.frame("2026-03-02 00:02:30", "2026-03-02 14:00:00", "2026-03-02")
+        self.assertFalse(
+            reflag_truncation(df, boundary_tolerance_minutes=1).iloc[0]["truncated_start"]
+        )
+
+    def test_rejects_missing_columns(self):
+        with self.assertRaises(ValueError):
+            reflag_truncation(pd.DataFrame({"arrival": [pd.Timestamp("2026-03-02")]}))

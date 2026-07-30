@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Run the risk engine on the default scenario catalogue and print results.
 
-Needs no data download -- it exercises the Monte Carlo, the scenario catalogue
-and the taxonomy wiring end to end using placeholder cost-per-hour figures.
+Needs no data download -- it exercises the Monte Carlo, the scenario catalogue,
+the taxonomy wiring and the economics derivation end to end.
 
-The euro-per-hour range below is a PLACEHOLDER, and deliberately labelled as
-one. Replacing it with a figure derived from AIS-observed traffic at Rønne plus
-Port of Rønne's published accounts is the substance of the consequence-model
-phase. Everything downstream of it is already wired.
+The cost per outage hour is now derived from Rønne Havn A/S's 2024 audited
+accounts and Danmarks Statistik call figures rather than assumed. See
+`portscra.risk.economics` for the derivation and its two documented reductions.
 
 Usage
 -----
@@ -21,25 +20,26 @@ import argparse
 import sys
 from pathlib import Path
 
+import numpy as np
+
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
-from portscra.risk import PERT, annual_disturbance_pct, simulate  # noqa: E402
+from portscra.risk import (  # noqa: E402
+    RONNE_2024,
+    OutageCostPerHour,
+    annual_disturbance_pct,
+    simulate,
+)
 from portscra.taxonomy import build_scenarios, stride_coverage  # noqa: E402
 
-#: Placeholder only. See module docstring.
-PLACEHOLDER_COST_PER_HOUR = PERT(
-    800, 2_500, 9_000,
-    source="PLACEHOLDER pending AIS calibration -- order-of-magnitude figure for "
-           "a small mixed port, to be replaced from port-call throughput and "
-           "published port accounts.",
-)
+#: Hours a year the port can operate. Rønne is effectively a 24-hour operation
+#: because Bornholmslinjen sails overnight, even though our AIS data puts 67%
+#: of commercial arrivals between 06:00 and 22:00 -- cargo work is daytime, the
+#: port is not closed.
+ANNUAL_SERVICE_HOURS = 24 * 365
 
-#: Rough annual service hours for a mixed port working extended but not
-#: continuous days. The denominator matters: expressing disturbance as a
-#: percentage of 24x365 would flatter the port by counting closed hours as
-#: undisturbed operation.
-ANNUAL_SERVICE_HOURS = 16 * 365
+COST_PER_HOUR = OutageCostPerHour(RONNE_2024, service_hours_per_year=ANNUAL_SERVICE_HOURS)
 
 
 def eur(value: float) -> str:
@@ -57,13 +57,18 @@ def main():
     args = parser.parse_args()
 
     scale = {10: 0.25, 50: 0.6, 100: 1.0}[args.persona]
-    scenarios = build_scenarios(PLACEHOLDER_COST_PER_HOUR, scale=scale)
+    scenarios = build_scenarios(COST_PER_HOUR, scale=scale)
     results = simulate(scenarios, iterations=args.iterations, seed=args.seed)
 
     print(f"\n=== PortSCRA risk engine ===")
     print(f"persona: {args.persona}-employee mixed port | "
           f"{args.iterations:,} simulated years | seed {args.seed}")
-    print(f"cost/hour: {PLACEHOLDER_COST_PER_HOUR}  <-- PLACEHOLDER\n")
+    draws = COST_PER_HOUR.sample(np.random.default_rng(1), 100_000)
+    print(f"cost/hour: EUR {COST_PER_HOUR.mean:,.0f}/h mean "
+          f"(P10 {np.percentile(draws,10):,.0f} / P90 {np.percentile(draws,90):,.0f})")
+    print(f"  derived from {RONNE_2024.name} {RONNE_2024.year}: "
+          f"EUR {RONNE_2024.revenue_eur/1e6:.1f}M revenue, "
+          f"{RONNE_2024.annual_calls:,} calls, {RONNE_2024.employees_fte} FTE\n")
 
     header = f"{'ID':4s} {'scenario':46s} {'ALE':>12s} {'P50':>12s} {'P90':>12s} {'P(any)':>7s}"
     print(header)

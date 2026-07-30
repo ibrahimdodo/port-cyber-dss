@@ -72,14 +72,21 @@ RONNE = PortArea(
     name="Rønne",
     unlocode="DKRNN",
     lat_min=55.080,
-    lat_max=55.120,
+    # Northern edge cut at 55.100 to exclude the marina. Derived from the
+    # 2026-07-25 validation run, which showed a clean spatial separation:
+    # commercial traffic (ferry, cargo, tanker, tug, SAR) berths at
+    # 55.0875-55.0994, while sailing and pleasure craft sit at 55.1033-55.1056.
+    # Before the cut, 29 of 50 vessels seen in a July day were recreational --
+    # they contribute nothing to port revenue and would badly distort a
+    # euro-per-hour calibration built on vessel counts.
+    lat_max=55.100,
     lon_min=14.670,
     lon_max=14.730,
     notes=(
-        "Project anchor. Expect high-frequency ferry calls (Bornholmslinjen to "
-        "Ystad and Køge, seasonal Sassnitz and Świnoujście), general cargo and "
-        "bulk, summer cruise calls, and offshore-wind project traffic. Roughly "
-        "3,000 calls and 1.4 Mt a year, ~1.5M passengers."
+        "Project anchor. Commercial basin only (marina excluded, see lat_max). "
+        "Bornholmslinjen ferries to Ystad and Køge, general cargo and bulk, "
+        "seasonal cruise, and offshore-wind project traffic. Roughly 3,000 "
+        "calls and 1.4 Mt a year, ~1.5M passengers."
     ),
 )
 
