@@ -1,0 +1,935 @@
+%=============================================================================
+% PortSCRA -- Supply-Chain Cyber Risk Assessment DSS for Small EU Ports
+% IEEE conference format (IEEEtran).
+%
+% Compile:  pdflatex portscra_report.tex   (run twice for cross-references)
+% No external .bib is required; references use thebibliography.
+%=============================================================================
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{cite}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{textcomp}
+\usepackage{url}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+
+\newcommand{\eur}{\mbox{\texteuro}}
+
+\begin{document}
+
+\title{PortSCRA: A Quantitative Decision Support System for\\
+Supply-Chain Cyber Risk in Small European Ports}
+
+\author{\IEEEauthorblockN{Ibrahim Dodo}
+\IEEEauthorblockA{\textit{Independent research project} \\
+\textit{Decision Support Systems}\\
+Karlskrona, Sweden \\
+idodo437@gmail.com}}
+
+\maketitle
+
+\begin{abstract}
+Small European ports face a legal obligation to manage supply-chain cyber risk
+under Directive (EU) 2022/2555 (NIS2), yet the tools available to them stop at a
+qualitative heat map. Commercial third-party risk platforms are enterprise-priced,
+black-box and port-blind; the accessible open tools produce a risk register rather
+than a decision. This paper presents PortSCRA, a decision support system that
+quantifies supplier-borne cyber risk for a small port in the units the problem is
+actually posed in --- euro of revenue, hours of downtime, percent of operations
+disturbed --- and then selects a mitigation portfolio under a budget constraint.
+The system couples a dependency graph (vendor $\rightarrow$ asset $\rightarrow$
+port service) built on the ENISA port taxonomies with a hybrid vendor-likelihood
+model fusing a NIS2-mapped questionnaire, AHP-elicited criterion weights and live
+vulnerability intelligence (EPSS, CISA KEV, OpenSSF Scorecard). Consequences are
+quantified by FAIR-style Monte Carlo simulation calibrated from four seasonal weeks
+of Danish Maritime Authority AIS data and the audited accounts of the anchor port,
+Rønne (Bornholm). A submodular knapsack optimiser then answers the procurement
+question directly. Validation is threefold: replay of six documented port incidents
+with anchoring and held-out sets kept separate, a controlled duel against a
+5$\times$5 qualitative matrix, and a persona sweep. Three results are reported that
+intuition did not predict: deriving the hourly outage cost from audited accounts
+reorders the risk ranking so that invoice fraud overtakes ransomware; a mitigation
+portfolio reduces the mean expected loss by 77\% but the P99 tail by only 63\%, so
+reporting the mean overstates the protection purchased; and return on security
+investment turns negative before the control catalogue is exhausted. The held-out
+incident replay failed on first execution and forced a structural change to the
+consequence model, which lowered the system's own loss estimate.
+\end{abstract}
+
+\begin{IEEEkeywords}
+decision support systems, supply-chain security, cyber risk quantification, FAIR,
+maritime cybersecurity, NIS2, port security, AIS
+\end{IEEEkeywords}
+
+%=============================================================================
+\section{Introduction}
+
+Maritime transport carries the majority of European Union trade through more than
+1{,}200 seaports \cite{enisa2019}. Those ports have digitalised rapidly, and in
+doing so have acquired a dependency structure that is neither well understood nor
+well governed: terminal operating systems, port community systems, cloud
+productivity suites, gate and crane equipment with vendor-maintained remote access,
+and a long tail of freely obtained software whose provenance nobody records.
+
+The attacks that matter increasingly arrive \emph{through} that structure rather
+than at its perimeter. SolarWinds distributed trojanized, validly signed updates to
+approximately 18{,}000 organisations \cite{solarwinds}. Kaseya's remote management
+tooling was used to deploy ransomware to roughly 1{,}500 downstream businesses
+\cite{kaseya}. A single managed file-transfer product, MOVEit, exposed data at over
+2{,}700 organisations \cite{moveit}. The xz-utils backdoor (CVE-2024-3094) placed
+malicious code inside a compression library present on almost every Linux system,
+and was discovered by accident \cite{xzutils}. Verizon's Data Breach Investigations
+Report records third-party involvement in a substantial and growing share of
+breaches \cite{dbir2025}.
+
+Ports are not spectators to this. The 2017 NotPetya incident cost Maersk an
+estimated USD 250--300 million and halted 76 terminals \cite{maersk}. The Port of
+Nagoya lost roughly two and a half days of container operations to LockBit
+ransomware in 2023 \cite{nagoya}. DP World Australia lost approximately three days
+in the same year. Antwerp's container release systems were manipulated over a
+two-year period to extract narcotics containers \cite{enisa2019}.
+
+\subsection{The decision maker}
+
+This work targets a specific and under-served decision maker: the person
+responsible for cybersecurity at a port of 10 to 100 employees, who is typically
+also responsible for IT, operations, or both, and who has no security team.
+
+Their obligation is not optional. Ports are Annex~I ``Transport --- Water''
+entities under NIS2 \cite{nis2}. Article~21(2)(d) makes supply-chain security an
+explicit legal requirement; Article~20 places training duties and personal
+liability on the management body; Article~23 imposes 24-hour and 72-hour incident
+reporting. Critically for the smallest ports, Article~2(2)(b) brings an entity into
+scope \emph{regardless of size} where it is the sole provider in a Member State of
+a service essential to critical societal or economic activities.
+
+\subsection{Problem statement}
+
+The brief this project addresses poses two questions:
+
+\begin{itemize}
+\item \textbf{Problem 1.} Which security tools, techniques and procedures should
+the organisation adopt in order to mitigate the cyber risks associated with its
+supplying vendors?
+\item \textbf{Problem 2.} Given the likelihood that a specific vendor is
+compromised, how large is the consequence for the business --- in revenue fall,
+in operational disturbance, in downtime hours?
+\end{itemize}
+
+Problem~2 is an estimation problem. Problem~1 is a constrained portfolio-selection
+problem, and treating it as a ranking exercise --- which is what every accessible
+tool does --- fails to answer it.
+
+\subsection{Contributions}
+
+\begin{enumerate}
+\item A dependency-graph formulation linking suppliers to port services through the
+ENISA asset taxonomy, enabling scenario frequencies to be \emph{derived} from a
+port's actual supplier list rather than assumed from a catalogue.
+\item An hourly outage cost derived from audited port accounts and AIS-observed
+traffic, cross-validated by two independent routes, replacing the placeholder
+figures typical of this literature.
+\item A budget-constrained control optimiser with a multiplicative (submodular)
+risk composition, an eviction-based local search, and demonstrated equivalence to
+brute-force optimum on tractable instances.
+\item A validation methodology that separates anchoring from held-out incidents,
+and a controlled comparison against the qualitative baseline the system is intended
+to replace.
+\item An open, reproducible implementation: 357 automated tests, five executable
+notebooks, and an interactive dashboard.
+\end{enumerate}
+
+%=============================================================================
+\section{Background and Related Work}
+
+\subsection{Regulatory and domain frameworks}
+
+ENISA's \emph{Port Cybersecurity} report \cite{enisa2019} provides the asset and
+threat taxonomies used throughout this work: ten asset categories spanning fixed
+and mobile infrastructure, OT systems and end-devices, IT systems, networks, safety
+and security systems, information, and people. Its companion, \emph{Cyber Risk
+Management for Ports} \cite{enisa2020}, defines a four-phase approach mapped to the
+ISPS Code: identify cyber-related assets and services; identify and evaluate risks;
+identify security measures; assess cybersecurity maturity. PortSCRA is, in
+substance, a computational operationalisation of those four phases for ports too
+small to perform them manually.
+
+The IMO addresses maritime cyber risk at the level of guidance
+(MSC-FAL.1/Circ.3, MSC.428(98)), and the CIS Controls v8 \cite{cis} supply the
+mitigation catalogue, with Implementation Group~1 (``essential cyber hygiene'')
+being the appropriate target for an organisation of this size.
+
+\subsection{Risk assessment methodology}
+
+Qualitative matrices remain dominant in practice, and CSET \cite{cset} and MONARC
+\cite{monarc} --- the two most accessible free tools --- both terminate in one.
+Cox \cite{cox2008} shows that arithmetic on ordinal severity scales is formally
+unsound, producing range compression and ranking reversals. More practically for
+this problem, a matrix cannot produce the euro and hour figures the brief demands.
+
+Factor Analysis of Information Risk (FAIR) \cite{fair} decomposes risk into loss
+event frequency and loss magnitude and evaluates the result by Monte Carlo
+simulation, yielding distributions rather than point estimates. Hubbard and
+Seiersen \cite{hubbard} provide the calibration methodology for the expert
+estimates such a model requires. Saaty's Analytic Hierarchy Process \cite{saaty}
+supplies criterion weights from pairwise comparisons together with a consistency
+ratio that exposes incoherent judgements rather than averaging them away.
+
+For threat identification, MITRE ATT\&CK \cite{attack} supplies technique
+identifiers; STRIDE is used only as a completeness audit, since it presumes a
+data-flow diagram of a system one owns --- precisely what is unavailable for a
+third party --- and the overall philosophy follows the risk-centric PASTA approach
+\cite{pasta} rather than a software-centric one.
+
+Vulnerability prioritisation draws on EPSS \cite{epss}, which estimates the
+probability of exploitation within 30 days and is empirically superior to severity
+scoring for triage; CISA's Known Exploited Vulnerabilities catalogue \cite{kev};
+and OpenSSF Scorecard \cite{scorecard} for open-source components, which is the
+only assessment available where there is no vendor to question.
+
+\subsection{Maritime cyber risk research}
+
+Tam and Jones' MaCRA \cite{macra} is the reference model-based framework for
+maritime cyber risk, but is ship- and voyage-centric, addresses neither the supply
+chain nor economic consequence, and does not produce a procurement decision.
+Recent work has combined AHP, FMEA and Bayesian updating for maritime
+infrastructure, and an optimisation-based approach to estimating economic losses
+from port cyber-attacks \cite{portloss} validates the direction of the consequence
+model presented here without addressing supplier likelihood.
+
+Visky's research programme at Tallinn University of Technology is the closest
+adjacent work on the data side. His doctoral thesis addresses cybersecurity for
+maritime operational technology \cite{viskythesis}, and Benterki, Visky, Vain and
+Tsiopoulos \cite{benterki2025} apply incremental inductive logic programming to
+learn spoofing-attack detection rules from real AIS data recorded at Tallinn
+harbour. Visky also published the AIS dataset underlying that work
+\cite{viskydataset}, explicitly to address the absence of publicly available,
+real-environment AIS data for validating anomaly-detection research. That programme
+is the authority cited for the AIS spoofing scenario in this paper
+(Section~\ref{sec:scenarios}), and its dataset was formally evaluated as a
+candidate primary data source (Section~\ref{sec:datachoice}).
+
+\subsection{Research gap}
+
+No published work combines (i) supplier-specific compromise likelihood, (ii)
+port-specific consequence quantification in operational and financial units, and
+(iii) prescriptive, budget-constrained mitigation selection, in a deployable system
+usable by a port without a security function. PortSCRA addresses that combination.
+
+%=============================================================================
+\section{System Architecture}
+
+The system is organised as a pipeline in which each stage consumes the previous
+stage's output, so that changing a supplier changes the recommended purchase.
+
+\begin{enumerate}
+\item \textbf{Domain model.} ENISA asset and threat taxonomies, six port services,
+and a scenario catalogue.
+\item \textbf{Dependency graph.} Vendors supply assets; assets support services;
+services carry apportioned revenue.
+\item \textbf{Likelihood engine.} Questionnaire plus live signals yields a
+per-vendor annual compromise probability band.
+\item \textbf{Consequence engine.} FAIR-style Monte Carlo over scenarios, with the
+hourly cost derived from port economics.
+\item \textbf{Decision layer.} Budget-constrained portfolio selection, efficient
+frontier, tornado sensitivity.
+\item \textbf{Supporting instruments.} Supplier security requirements, awareness
+assessment, ENISA maturity profile.
+\end{enumerate}
+
+\subsection{Scenario catalogue}
+\label{sec:scenarios}
+
+Seven scenarios are modelled. Each is constructed from three independent frames ---
+an ENISA threat category, one or more MITRE ATT\&CK techniques, and a STRIDE
+completeness check --- and each is anchored to a documented incident so that its
+parameters are not arbitrary. Table~\ref{tab:scenarios} summarises them.
+
+\begin{table}[t]
+\caption{Scenario catalogue with framework mappings and incident anchors}
+\label{tab:scenarios}
+\centering
+\footnotesize
+\begin{tabular}{@{}llp{2.5cm}@{}}
+\toprule
+\textbf{ID} & \textbf{Scenario} & \textbf{Anchor} \\
+\midrule
+S1 & Trojanized update to TOS/PCS & SolarWinds (2020) \\
+S2 & MSP compromise $\rightarrow$ ransomware & Kaseya, Nagoya, DP World \\
+S3 & SaaS account takeover $\rightarrow$ invoice fraud & BEC against maritime agents \\
+S4 & OT/IoT compromise (gates, cranes, CCTV) & Antwerp (2011--13) \\
+S5 & AIS/GNSS spoofing or jamming & Baltic GNSS interference \\
+S6 & Compromised freeware/OSS dependency & xz-utils, CVE-2024-3094 \\
+S7 & Vendor data breach & MOVEit (2023) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Scenario S5 warrants specific attention because AIS is unauthenticated by design: a
+position report is a claim, not a measurement. Sustained GNSS interference has been
+reported across the Baltic region since 2023. The detection of such manipulation is
+the subject of Visky's research programme \cite{benterki2025,viskythesis}, and the
+dataset published to support it \cite{viskydataset} remains the appropriate
+empirical resource should this scenario require demonstration rather than
+modelling.
+
+%=============================================================================
+\section{Data and Calibration}
+
+\subsection{Anchor port selection}
+
+The anchor port is Rønne, on the Danish island of Bornholm. The selection criteria
+were that the port be genuinely small rather than a scaled-down proxy, that its
+traffic be genuinely mixed, that it lie in the Baltic region as the brief framed,
+and that reliable open data exist for it.
+
+Rønne satisfies all four. It handles over 3{,}000 ship calls, 1.4~Mt of cargo and
+approximately 2~million passengers annually, across ferry routes to Ystad, Køge,
+Sassnitz and Świnoujście, plus cargo, cruise and offshore-wind project traffic. Its
+operating company employs 34 full-time equivalents.
+
+That headcount is analytically important. At 34 FTE the port falls \emph{below}
+NIS2's medium-enterprise threshold, and would be out of scope on size alone. As the
+sole supply port for an island population it is nonetheless in scope under
+Article~2(2)(b). Rønne is therefore a precise instance of the organisation this
+system targets: legally obligated, operationally critical, and far too small to
+operate a security function. Being an island port also sharpens the consequence
+model, since an outage severs a supply line for which no road alternative exists
+--- a harm ENISA identifies explicitly as more severe for islands \cite{enisa2020}.
+
+\subsection{Dataset selection}
+\label{sec:datachoice}
+
+Two candidate AIS sources were evaluated.
+
+The Danish Maritime Authority publishes daily AIS archives covering all Danish
+waters, free of charge and without registration, from 2006 to within days of the
+present \cite{dma}. Files are approximately 600~MB compressed per day, with 26
+documented columns.
+
+The alternative was the dataset published by Visky \cite{viskydataset}: six months
+of AIS recorded near the Port of Tallinn, released under Apache 2.0 specifically to
+provide the real-environment data that AIS anomaly-detection research had lacked.
+It is a purpose-built maritime-cybersecurity research resource by an author whose
+doctoral work is in exactly this domain \cite{viskythesis}, and it is a genuinely
+valuable contribution.
+
+It was nonetheless rejected as the primary source, for a reason unrelated to its
+quality. The Port of Tallinn handles approximately 29.8~Mt of cargo, over
+2~million TEU and 7.75--10.6~million passengers across five harbours. Anchoring on
+Tallinn would have contradicted the small-port premise on which the entire system
+rests: a port of that scale has a security function and does not need this DSS.
+A secondary consideration was that the dataset's structure is undocumented and its
+volume (3.58~GB compressed, 20.4~GB expanded for a single locality over six months)
+suggests message-level raw data suited to the anomaly-detection task it was built
+for rather than to the port-call statistics required here. The dataset and its
+associated publications are retained as the citation basis for scenario S5.
+
+\subsection{AIS processing}
+
+Four full Monday-to-Sunday weeks --- one per season --- were downloaded and reduced
+to port calls: approximately 18~GB ingested, 82~kB retained. A port call is defined
+as a maximal run of stationary reports (speed over ground below 0.5~kn, or
+navigational status indicating moored) from one vessel within the port polygon,
+with consecutive reports no more than 30 minutes apart and total duration at least
+one hour.
+
+Two corrections were required, both identified by comparing output against reality
+rather than by code inspection.
+
+First, the bounding box captured the marina alongside the commercial basin. The
+data itself supplied the remedy: commercial berths occupy latitudes
+55.0875--55.0994 and recreational craft 55.1033--55.1056, a clean separation. Before
+correction, 29 of 50 vessels observed on a July day were sailing or pleasure craft,
+which carry no port dues and would have distorted any per-call economic figure.
+
+Second, and more consequentially, the truncation tolerance was tighter than AIS's
+own reporting interval. ITU-R M.1371 specifies a three-minute reporting interval for
+a moored Class~A vessel, so a ship already alongside at midnight frequently produced
+its first message of the day at 00:02 and was recorded as a fresh arrival. The
+resulting dwell distribution was pinned at 23.9 hours at the 90th percentile --- an
+artefact of the observation window rather than a berth pattern. The tolerance was
+widened to five minutes and calls split by the daily file boundary were stitched.
+
+The effect is substantial. The Passenger median dwell fell from 9.01 to 2.70 hours,
+which is a realistic ro-pax turnaround and matches directly observed HAMMERSHUS
+calls; 66 multi-day stays, previously invisible, were recovered.
+
+\subsection{Reconciliation}
+
+The AIS-derived call count was reconciled against Danmarks Statistik's official
+series for Rønne (table SKIB101) \cite{dst}. On the corrected basis, commercial
+calls annualise to 2{,}203 and all-vessel calls to 4{,}993. The official figures ---
+3{,}043 in 2024 and 2{,}933 in 2025 --- fall \emph{inside} that bracket. Bracketing
+is a stronger result than a single ratio: the official series evidently counts more
+than the strict commercial set (including fishing, tugs and service craft) but
+excludes the recreational traffic the all-vessel count captures.
+
+Seasonality is pronounced: commercial calls per day range from 4.0 in winter to 7.9
+in summer, a 1.96$\times$ swing, with autumn nearly matching summer owing to
+offshore-wind installation campaigns. A consequence model calibrated on July alone
+would overstate January risk by approximately half.
+
+\subsection{Hourly outage cost}
+
+The cost of one hour of disrupted operations is derived from Rønne Havn A/S's 2024
+audited accounts \cite{ronne2024}: net revenue DKK~169.8~million
+($\approx$~\eur{}22.76~million), EBITDA DKK~101.7~million, 3{,}043 calls, 34~FTE.
+Two reductions are applied, both modelled as distributions because both are
+uncertain:
+
+\begin{itemize}
+\item \textbf{Call-dependent share}, PERT(0.45, 0.60, 0.80). A cyber outage stops
+vessel handling but does not stop the clock on land leases and project-area rental,
+which are billed on time and grew sharply at Rønne in 2024. No segment reporting is
+available --- the income statement is classified by nature --- so this is an
+estimate, documented as such.
+\item \textbf{Unrecoverable share}, PERT(0.20, 0.40, 0.70). Ferry and bulk traffic
+largely catches up after restoration, as both Nagoya and DP World demonstrated.
+What is genuinely lost is diverted traffic, cruise calls that cannot be
+rescheduled, and closed offshore project windows.
+\end{itemize}
+
+The result is \eur{}659 per hour (P10 \eur{}451, P90 \eur{}883) against 8{,}760
+service hours. Rønne is treated as a 24-hour operation because Bornholmslinjen
+sails overnight, although 67\% of commercial arrivals fall between 06:00 and 22:00.
+
+This figure was cross-validated by an independent derivation --- revenue per call
+multiplied by the observed call rate --- which agrees to a ratio of 1.00 on a
+matched call basis. The cross-check justified itself immediately: it exposed a
+15$\times$ unit error in which daily revenue was converted to hourly using a factor
+of 24 rather than $365/\textrm{service hours}$.
+
+%=============================================================================
+\section{Vendor Compromise Likelihood}
+
+\subsection{Hybrid evidence model}
+
+Neither available evidence source is sufficient alone for a small port's supplier
+list, which mixes global SaaS providers with two-person integrators. A questionnaire
+reaches every supplier but is self-reported and static; public signals are objective
+and current but exist only where there is published software with assigned CVEs.
+The two are therefore fused.
+
+The questionnaire comprises 20 questions across seven criteria, each mapped to
+points of NIS2 Article~21(2), so that administering it simultaneously produces the
+supply-chain diligence evidence the directive requires. It is deliberately short:
+a small port has no leverage to send a 300-question industry-standard questionnaire
+to its crane OEM and expect a response.
+
+The seven criteria are access and privilege, asset criticality, vendor security
+posture, update-channel integrity, incident history and transparency, port data
+held, and substitutability. Weights are obtained by AHP pairwise comparison with a
+consistency check. An elicitation session produced a consistency ratio of 0.044 ---
+comfortably within Saaty's 0.10 threshold --- and weights closely tracking
+literature-derived defaults (access 0.238 against 0.24), which is mild
+corroboration of both.
+
+\subsection{Live vulnerability intelligence}
+
+External signals are fetched from three free sources: EPSS \cite{epss} for
+exploitation probability, CISA KEV \cite{kev} for observed exploitation, and
+OpenSSF Scorecard \cite{scorecard} for open-source repository hygiene. Responses
+are cached with a time-to-live, and a feed that cannot be reached leaves the signal
+\emph{unset} and reports the failure, never returning a value that resembles a
+clean result.
+
+Signal weighting is deliberately asymmetric: presence in KEV raises assessed risk
+substantially, while absence lowers it only slightly. The live data supplies a
+compelling justification for this. CVE-2024-3094 --- the xz-utils backdoor --- scores
+0.86 on EPSS yet is \emph{absent} from KEV, because it was discovered before it was
+exploited in the wild. One of the most serious supply-chain compromises yet
+documented would score clean on a KEV-only check.
+
+\subsection{Scoring}
+
+Criterion scores are combined using the AHP weights, renormalised over the criteria
+actually answered, producing a posture score in $[0,1]$. Posture maps to an exposure
+multiplier by geometric interpolation over $[0.4, 2.5]$, since risk multipliers
+compound; the range is bounded because no questionnaire justifies asserting that a
+supplier is an order of magnitude safer than average. The product of exposure and
+signal multipliers scales a documented base rate, PERT(0.02, 0.05, 0.12), into a
+per-vendor probability band.
+
+Two design decisions merit statement. A vendor that supplies no evidence scores
+0.5, not 0: if silence produced a favourable score, declining to answer would be
+the cheapest route to appearing safe. And partial responses are scored only on what
+was answered, so a supplier answering the access questions badly is not credited
+for the questions it skipped.
+
+%=============================================================================
+\section{Risk Quantification}
+
+\subsection{The dependency graph}
+
+The join that makes the system port-specific rather than generic maps vendors to
+the ENISA asset classes they supply, and asset classes to the six port services
+they support: vessel handling, cargo handling, passenger handling, gate operations,
+declarations, and billing. Each service carries an apportioned share of
+call-dependent revenue.
+
+The graph answers a question no per-vendor score can: how much of the port does
+each supplier touch? Ranked by revenue exposed rather than by security posture, the
+crane OEM reaches 80\% and the managed service provider 75\%. Concentration is a
+property of the topology, and a supplier touching everything is a risk even when it
+is well run.
+
+\subsection{Derived frequencies}
+
+Scenario frequencies are constructed from the suppliers that provide the assets a
+scenario targets, each contributing in proportion to its coverage of those assets.
+Contributions \emph{add}, because loss event frequency is a Poisson rate; treating
+them as probabilities would be incorrect. A scenario with no matching supplier
+retains its generic prior rather than falling to zero, since otherwise omitting a
+vendor from the register would be the cheapest way to reduce measured risk.
+
+The derived frequencies differ materially from the priors, and in both directions:
+the trojanized-update scenario is 2.2$\times$ more likely than the generic prior for
+this port, the OT compromise 1.9$\times$, while SaaS takeover falls by a factor of
+three and vendor data breach by four.
+
+\subsection{Monte Carlo}
+
+Annual loss is simulated as
+\begin{equation}
+L_{\textrm{annual}} = \sum_{i=1}^{N} M_i, \qquad N \sim \textrm{Poisson}(\lambda),
+\end{equation}
+where $\lambda$ is drawn per simulated year from the loss event frequency
+distribution and each magnitude $M_i$ is
+\begin{equation}
+M_i = D_i \cdot c + R_i + S_i,
+\end{equation}
+with $D_i$ operational downtime hours, $c$ the hourly cost, $R_i$ response cost,
+and $S_i$ a secondary loss realised with a stated probability.
+
+The Poisson step is not incidental. Multiplying frequency by magnitude yields the
+mean and destroys the shape, and the shape is the object of interest: a port with a
+frequency of 0.08 per year has no average year, only quiet years and one very bad
+one. In the reported configuration 45\% of simulated years incur no loss at all
+while the 99th percentile exceeds \eur{}566{,}000. Downtime is additionally gated by
+a disruption probability, discussed in Section~\ref{sec:validation}.
+
+%=============================================================================
+\section{Decision Layer}
+
+\subsection{Formulation}
+
+Problem~1 is formulated as constrained portfolio selection. Each control $j$ has an
+annual cost $k_j$ and, per scenario $s$, a frequency reduction $f_{js}$ and a
+magnitude reduction $m_{js}$ --- kept separate because backups do not prevent
+ransomware, they make it survivable, and a single ``effectiveness'' scalar cannot
+express that difference. Residual expected loss is
+\begin{equation}
+\textrm{ALE}(X) = \sum_{s} \textrm{ALE}_s
+\prod_{j \in X}(1 - f_{js}) \prod_{j \in X}(1 - m_{js}),
+\end{equation}
+minimised subject to $\sum_{j \in X} k_j \le B$.
+
+Composition is multiplicative rather than additive. Two controls each halving a
+frequency leave a quarter of it, not zero; additive composition would permit the
+model to ``eliminate'' a risk by stacking mediocre controls and would systematically
+over-purchase. Multiplicativity also renders the objective submodular, which is what
+makes greedy selection principled rather than merely convenient.
+
+\subsection{Search}
+
+Selection proceeds greedily by marginal reduction per euro, with marginals
+recomputed after each choice so that overlap is accounted for. Greedy alone,
+however, falls into the classical knapsack trap: at a \eur{}1{,}000 budget it
+purchased two inexpensive high-ratio controls totalling \eur{}800 when a single
+\eur{}1{,}000 control was strictly superior, and no one-for-one swap could recover
+the position because affording the better control required evicting both. An
+eviction-based local search was added, admitting a candidate by removing incumbents
+in ascending order of marginal contribution. The augmented search matches
+brute-force optimum at every budget tested.
+
+The control catalogue comprises 20 implementable projects rather than individual
+safeguards, each mapped to CIS v8 safeguards and NIS2 points. CIS v8 defines 153
+safeguards and Implementation Group~1 alone contains 56; a 34-person port will not
+implement 56 discrete items, and a catalogue at that granularity produces an answer
+nobody acts upon.
+
+%=============================================================================
+\section{Supporting Instruments}
+
+Three further components complete ENISA's four-phase cycle and the brief's stated
+DSS tasks.
+
+\textbf{Supplier security requirements.} Fourteen requirements are scoped by the
+asset classes a supplier provides, tiered essential/recommended/advanced, and each
+carries contract text, an evidence test, and the NIS2 point it discharges.
+Requirements are keyed to the questionnaire questions that verify them, so gap
+analysis falls out of answers already collected. A requirement with no verifying
+answer is reported as \emph{unverified} rather than met: not asking is not passing.
+The essential tier is capped, because a list a port is willing to lose a supplier
+over must be short enough to survive a procurement negotiation.
+
+\textbf{Awareness assessment.} The brief asks to identify awareness of
+\emph{specific} vendor-related risks, so the instrument is not a fixed quiz:
+vignettes are selected in the order the risk engine ranked the scenarios. The
+measured score feeds back into scenario frequencies, weighted by how much of each
+scenario is plausibly under human control --- invoice fraud at 0.60, a signed
+trojanized update at 0.05. A tool claiming that training reduces every risk equally
+would be selling training rather than measuring it. Management scores are reported
+separately, because Article~20(2) obliges the management body itself to train, and
+an organisational average can conceal a board that has not.
+
+\textbf{Maturity.} ENISA phase four is implemented using the three levels defined in
+\cite{enisa2020}: Basic, Intermediate, Optimal. An optimised portfolio implies a
+maturity profile, allowing a budget to be read in ENISA's terms as well as in euro.
+The mapping deliberately caps what purchasing alone achieves: the full catalogue
+reaches 2.42 of 3, because level~3 requires oversight, testing and continuous
+improvement, and ENISA is explicit that maturity cannot be attained through a
+checklist mentality.
+
+%=============================================================================
+\section{Validation}
+\label{sec:validation}
+
+\subsection{Incident replay}
+
+Six documented port incidents were replayed against the model, separated into those
+that \emph{anchored} the estimates and those \emph{held out}. Only the held-out set
+constitutes evidence; checking a model against the data used to construct it is a
+consistency check, and reporting it as validation would be dishonest.
+
+The first execution failed two of four held-out cases, and the failure was the most
+productive result of the project. The Port of Barcelona and the Port of San Diego
+(both 2018) suffered ransomware without halting quay operations: IT systems were
+affected while vessel operations continued. The model's downtime estimate had a
+floor of 24 hours and therefore could not produce that outcome at any percentile.
+It was asserting that supplier-borne ransomware invariably becomes an operational
+outage, which the record contradicts.
+
+The remedy was structural rather than a parameter adjustment. A
+\emph{disruption probability} was introduced, separating ``an incident occurred''
+from ``operations stopped''; simply lowering the floor would have conflated two
+distinct phenomena. It was set to 0.67 for S2 from the evidence --- four of six
+documented incidents disrupted operations --- and 0.50 for S1, since few of the
+approximately 18{,}000 organisations that installed the SolarWinds backdoor were
+actively exploited, and the resulting harm was predominantly espionage rather than
+outage.
+
+All four held-out incidents now fall inside the predicted band, and the change
+\emph{lowered} the model's own expected-loss estimate for S2 from \eur{}27{,}852 to
+\eur{}25{,}714. Because band containment becomes a weak test once the band begins at
+zero, a sharper check is also reported: the model predicts that 33\% of ransomware
+events cause no operational downtime, against 33\% (two of six) observed.
+
+\subsection{Baseline comparison}
+
+The system was compared against a 5$\times$5 qualitative matrix, both methods fed
+the \emph{same} underlying estimates so that the comparison isolates method rather
+than inputs. The result is more informative than a simple defeat of the baseline.
+
+Rank agreement between the matrix score and the quantitative expected loss is
+$+0.91$ (Spearman): the matrix \emph{orders} risks perfectly sensibly. Were that
+not so, outperforming it would prove little. Where it fails is allocation. Six of
+seven scenarios fall into a single ``Medium'' band spanning a factor of 4.2 in
+expected loss --- Cox's range compression \cite{cox2008} made concrete --- so a heat
+map cannot prioritise among them.
+
+Spending an identical budget by each method, the optimiser wins at every level
+tested, by \eur{}1{,}644 to \eur{}18{,}856 per year, peaking at $+17\%$ of baseline
+at a \eur{}15{,}000 budget (Table~\ref{tab:duel}). The precise claim is therefore
+that \emph{a matrix can rank well and still allocate badly}, because it cannot
+perceive that an inexpensive control touching four amber risks outperforms an
+expensive one touching a single red.
+
+\begin{table}[t]
+\caption{Residual expected loss, same budget spent two ways}
+\label{tab:duel}
+\centering
+\footnotesize
+\begin{tabular}{@{}rrrr@{}}
+\toprule
+\textbf{Budget} & \textbf{Heat-map led} & \textbf{Optimised} & \textbf{Advantage} \\
+\midrule
+\eur{}10,000 & \eur{}58,337 & \eur{}52,335 & \eur{}6,002 \\
+\eur{}15,000 & \eur{}57,709 & \eur{}38,853 & \eur{}18,856 \\
+\eur{}25,000 & \eur{}32,344 & \eur{}25,384 & \eur{}6,960 \\
+\eur{}40,000 & \eur{}22,793 & \eur{}18,561 & \eur{}4,232 \\
+\eur{}60,000 & \eur{}15,804 & \eur{}14,160 & \eur{}1,644 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Persona sweep}
+
+The brief specifies 10, 50 and 100-employee personas, which bracket Rønne's actual
+34~FTE. Both revenue and response costs scale with headcount, giving hourly outage
+costs of \eur{}194, \eur{}969 and \eur{}1{,}937 respectively.
+
+At a fixed \eur{}25{,}000 budget all three personas select an identical portfolio.
+This is an artefact rather than a finding: \eur{}25{,}000 represents 88\% of the
+smallest persona's entire annual expected loss and 19\% of the largest's. At
+size-proportional budgets the three select three distinct portfolios, and the
+smallest is the most instructive --- a ten-person port with \eur{}2{,}500 is directed
+to purchase exactly one control: out-of-band verification of payment changes, a
+\eur{}1{,}500 procedural measure that reduces the highest-ranked scenario by three
+quarters. That is a credible answer for an organisation that cannot afford a
+security programme at all.
+
+%=============================================================================
+\section{Results and Discussion}
+
+\subsection{Portfolio selection}
+
+At a \eur{}25{,}000 budget the optimiser reduces expected annual loss from
+\eur{}111{,}186 to \eur{}25{,}384, a 77\% reduction at a return on security
+investment of $+2.4\times$. Seven of the eight selected controls belong to CIS
+Implementation Group~1. This is a \emph{result} rather than a constraint: nothing
+restricted the search to IG1, which simply purchased inexpensive fundamentals
+first. It constitutes independent support for CIS's own position on what carries
+most value for small organisations.
+
+\subsection{Three findings that intuition did not predict}
+
+\textbf{The derived cost reorders the risks.} Under a placeholder hourly cost, MSP
+ransomware ranked first. Once the figure was derived from audited accounts ---
+\eur{}659, because a small port's revenue per hour is genuinely modest ---
+SaaS-mediated invoice fraud overtook it. The reason is structural: downtime-driven
+losses scale with a modest hourly revenue, whereas a fraudulent payment is direct,
+immediate and unrecoverable. A qualitative assessment would in all likelihood have
+rated ransomware ``critical'' and business email compromise ``medium''.
+
+\textbf{The tail is stickier than the mean.} The selected portfolio reduces mean
+expected loss by 77\% but the 99th percentile by only 63\%. The portfolio
+predominantly purchases \emph{frequency} reduction --- loss-free years rise from 34\%
+to 52\% --- while the bad year that still occurs remains expensive, because the
+residual tail is dominated by whichever scenarios the budget could not address.
+Reporting only the mean therefore \emph{overstates} the protection purchased. This
+runs contrary to the usual argument for quantification, which presumes benefit
+concentrates in the tail.
+
+\textbf{Return on investment turns negative before the catalogue is exhausted.} The
+efficient frontier yields ROSI of $+5.5\times$ at \eur{}9{,}000, $+2.0\times$ at
+\eur{}30{,}000, $+1.0\times$ at \eur{}48{,}000, and $-0.3\times$ at full-catalogue
+spend. Purchasing everything is worse than purchasing the correct subset --- a
+conclusion a compliance checklist structurally cannot reach, and the strongest
+single argument in this work for optimisation over enumeration.
+
+\subsection{Methodological observation}
+
+Two conclusions in this project reversed under a parameter sweep after appearing
+robust at a single value. The first was the tail-versus-mean relationship; the
+second was a comparison of generic against supplier-derived frequencies, which
+appeared to produce identical portfolios at the default budget and in fact differs
+at five of eight budget levels. A comparison performed at one parameter value is an
+anecdote. This bears directly on the single-case-study methodology common in
+applied DSS reporting.
+
+%=============================================================================
+\section{Limitations}
+
+\textbf{Estimate provenance.} The weakest inputs are control effectiveness and the
+two economic share parameters. Every estimate carries a documented source string,
+and an automated test fails if any lacks one, but they remain estimates. The
+tornado analysis is the appropriate response: it identifies which estimates would
+change the decision if wrong, and which would not.
+
+\textbf{Linear persona scaling.} Revenue is scaled linearly with headcount, a crude
+proxy for a capital-intensive industry in which revenue per employee varies widely
+with automation and business mix.
+
+\textbf{Coverage weighting.} A vendor's contribution to a scenario is proportional
+to the fraction of that scenario's target assets it supplies. This is a proxy, not a
+measurement, and is the assumption in the dependency graph most deserving of
+challenge.
+
+\textbf{Single anchor port.} All calibration derives from one port. The method
+transfers; the numbers do not.
+
+\textbf{Illustrative supplier list.} The worked example uses illustrative supplier
+\emph{roles}, not real companies. Naming real firms would assert claims about their
+security posture for which no evidence exists. Correspondingly, no signal value is
+entered by hand: an earlier iteration typed EPSS scores and KEV counts directly, and
+this inflated one supplier's assessed risk from 7.6\% to 13.3\% on invented
+evidence. A test now fails if any hand-entered feed value reappears.
+
+%=============================================================================
+\section{Conclusion and Future Work}
+
+PortSCRA demonstrates that supplier-borne cyber risk for a small port can be
+quantified in the units the problem is posed in, and that the resulting figures
+support a materially better procurement decision than the qualitative baseline they
+would replace --- by \eur{}1{,}644 to \eur{}18{,}856 per year at identical budgets.
+All four ENISA risk-management phases are implemented, and every deliverable the
+originating brief specifies is realised in code.
+
+The results that matter most are those that contradicted expectation. Deriving the
+hourly outage cost from audited accounts reordered the risk ranking. A mitigation
+portfolio moves the mean considerably further than the tail, so the mean overstates
+the protection obtained. Return on investment turns negative before the catalogue is
+exhausted. And a held-out validation set failed on first execution, forcing a
+structural correction that lowered the system's own loss estimate --- which is what
+a validation suite is for. A validation suite that never fails is not one.
+
+Future work falls into three directions. First, discrete-event simulation of outage
+propagation, capturing the non-linearity by which a 48-hour outage costs more than
+48 hours of revenue through queueing and recovery effects. Second, extension to
+multiple anchor ports to test whether the calibration method transfers as the
+architecture is intended to. Third, empirical treatment of the AIS spoofing
+scenario using the real-environment dataset published for that purpose
+\cite{viskydataset}, which would replace a modelled likelihood with a measured one.
+
+%=============================================================================
+\section*{Reproducibility}
+
+The implementation comprises approximately 12{,}900 lines of Python across 28
+modules, with 357 automated tests that require no network access, five executable
+notebooks with committed outputs, and an interactive dashboard. Vulnerability
+intelligence is fetched live and cached; AIS processing is reproducible from the
+public archive; all derived port-call data required to reproduce the analysis is
+included at 82~kB.
+
+\section*{Statement on the Use of AI}
+
+This work was produced with AI collaboration (Level~3). An AI assistant was used
+for implementation, literature search, code review and drafting. All architectural
+decisions, the methodology, the validation design and the interpretation of results
+are the author's own, and every quantitative claim in this paper was verified
+against the executing implementation. Several of the findings reported here ---
+notably the incident-replay failure and the parameter-sweep reversals --- were
+identified by tests and analyses the author specified for the purpose of finding
+such errors.
+
+%=============================================================================
+\begin{thebibliography}{00}
+
+\bibitem{enisa2019}
+ENISA, ``Port Cybersecurity: Good practices for cybersecurity in the maritime
+sector,'' European Union Agency for Cybersecurity, Nov. 2019.
+
+\bibitem{enisa2020}
+ENISA, ``Cyber Risk Management for Ports: Guidelines for cybersecurity in the
+maritime sector,'' European Union Agency for Cybersecurity, Dec. 2020.
+ISBN 978-92-9204-403-9, doi: 10.2824/671060.
+
+\bibitem{nis2}
+European Parliament and Council, ``Directive (EU) 2022/2555 concerning measures for
+a high common level of cybersecurity across the Union (NIS2),'' \emph{Official
+Journal of the European Union}, L333, pp. 80--152, Dec. 2022.
+
+\bibitem{cox2008}
+L. A. Cox Jr., ``What's Wrong with Risk Matrices?'' \emph{Risk Analysis}, vol. 28,
+no. 2, pp. 497--512, 2008, doi: 10.1111/j.1539-6924.2008.01030.x.
+
+\bibitem{fair}
+The Open Group, ``Risk Analysis (O-RA), Version 2.0.1,'' Open Group Standard, 2021.
+
+\bibitem{hubbard}
+D. W. Hubbard and R. Seiersen, \emph{How to Measure Anything in Cybersecurity
+Risk}, 2nd ed. Hoboken, NJ: Wiley, 2023.
+
+\bibitem{saaty}
+T. L. Saaty, \emph{The Analytic Hierarchy Process: Planning, Priority Setting,
+Resource Allocation}. New York: McGraw-Hill, 1980.
+
+\bibitem{attack}
+MITRE, ``MITRE ATT\&CK: Enterprise and ICS Matrices.'' [Online]. Available:
+\url{https://attack.mitre.org/}
+
+\bibitem{pasta}
+T. UcedaVélez and M. M. Morana, \emph{Risk Centric Threat Modeling: Process for
+Attack Simulation and Threat Analysis}. Hoboken, NJ: Wiley, 2015.
+
+\bibitem{epss}
+J. Jacobs, S. Romanosky, B. Edwards, I. Adjerid, and M. Roytman, ``Exploit
+Prediction Scoring System (EPSS),'' \emph{Digital Threats: Research and Practice},
+vol. 2, no. 3, pp. 1--17, 2021, doi: 10.1145/3436242. [Online]. Available:
+\url{https://www.first.org/epss/}
+
+\bibitem{kev}
+CISA, ``Known Exploited Vulnerabilities Catalog.'' [Online]. Available:
+\url{https://www.cisa.gov/known-exploited-vulnerabilities-catalog}
+
+\bibitem{scorecard}
+Open Source Security Foundation, ``OpenSSF Scorecard.'' [Online]. Available:
+\url{https://securityscorecards.dev/}
+
+\bibitem{cis}
+Center for Internet Security, ``CIS Critical Security Controls, Version 8,'' 2021.
+
+\bibitem{macra}
+K. Tam and K. Jones, ``MaCRA: a model-based framework for maritime cyber-risk
+assessment,'' \emph{WMU Journal of Maritime Affairs}, vol. 18, pp. 129--163, 2019,
+doi: 10.1007/s13437-019-00162-2.
+
+\bibitem{portloss}
+Y. Ben Farah, et al., ``Estimating economic losses from cyber-attacks on shipping
+ports: An optimization-based approach,'' \emph{Transportation Research Part C:
+Emerging Technologies}, vol. 133, 103423, 2021,
+doi: 10.1016/j.trc.2021.103423.
+
+\bibitem{viskythesis}
+G. Visky, ``Cybersecurity for Maritime Operational Technology: Challenges,
+Considerations and Solutions,'' Ph.D. dissertation, Dept. Software Science, Tallinn
+Univ. of Technology, Tallinn, Estonia, 2025.
+
+\bibitem{benterki2025}
+A. S. Benterki, G. Visky, J. Vain, and L. Tsiopoulos, ``Using Incremental Inductive
+Logic Programming for Learning Spoofing Attacks on Maritime Automatic
+Identification System Data,'' in \emph{Maritime Cybersecurity}, S. Bauk, Ed. Cham:
+Springer, 2025, ch. 7, doi: 10.1007/978-3-031-87290-7\_7.
+
+\bibitem{viskydataset}
+G. Visky, ``AIS Dataset: 6-month long AIS data recorded near by port of Tallinn,''
+Kaggle, 2024, Apache License 2.0. [Online]. Available:
+\url{https://www.kaggle.com/datasets/gaborvisky/ais-dataset}
+
+\bibitem{dma}
+Danish Maritime Authority, ``AIS Data.'' [Online]. Available:
+\url{http://aisdata.ais.dk}
+
+\bibitem{dst}
+Statistics Denmark, ``SKIB101: Call of vessels, passengers and throughput of goods
+in traffic ports by seaport, unit and time.'' [Online]. Available:
+\url{https://www.statbank.dk/SKIB101}
+
+\bibitem{ronne2024}
+Rønne Havn A/S, ``Årsrapport 2024,'' CVR no. 27932150, Rønne, Denmark, 2025.
+
+\bibitem{dbir2025}
+Verizon, ``2025 Data Breach Investigations Report,'' Verizon Business, 2025.
+
+\bibitem{maersk}
+A.P. Møller--Maersk, ``Interim Report Q2 2017,'' Copenhagen, Denmark, Aug. 2017.
+
+\bibitem{nagoya}
+Dragos, ``OT Cybersecurity Breach Disrupts Operations at the Port of Nagoya,
+Japan,'' Jul. 2023. [Online]. Available:
+\url{https://www.dragos.com/blog/}
+
+\bibitem{solarwinds}
+CISA, ``Emergency Directive 21-01: Mitigate SolarWinds Orion Code Compromise,''
+Dec. 2020.
+
+\bibitem{kaseya}
+CISA, ``Kaseya VSA Supply-Chain Ransomware Attack,'' Alert AA21-183A, Jul. 2021.
+
+\bibitem{moveit}
+CISA, ``\#StopRansomware: CL0P Ransomware Gang Exploits MOVEit Vulnerability,''
+Alert AA23-158A, Jun. 2023.
+
+\bibitem{xzutils}
+National Vulnerability Database, ``CVE-2024-3094: Malicious code in xz-utils,''
+Mar. 2024.
+
+\bibitem{cset}
+CISA, ``Cyber Security Evaluation Tool (CSET).'' [Online]. Available:
+\url{https://github.com/cisagov/cset}
+
+\bibitem{monarc}
+Luxembourg House of Cybersecurity, ``MONARC: Method for an Optimised Analysis of
+Risks by CASES.'' [Online]. Available: \url{https://www.monarc.lu/}
+
+\end{thebibliography}
+
+\end{document}
