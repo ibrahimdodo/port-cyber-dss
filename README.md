@@ -186,6 +186,7 @@ numbers](notebooks/01_the_port_and_the_numbers.ipynb) → [suppliers](notebooks/
 | `src/portscra/maturity.py` | ENISA phase-four maturity self-assessment |
 | `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
 | `notebooks/` | Five narrative notebooks with outputs committed — the readable walkthrough |
+| `deploy/huggingface/` | Spaces config and a one-command sync script |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
@@ -220,6 +221,14 @@ A [Kaggle AIS dataset near Tallinn](https://www.kaggle.com/datasets/gaborvisky/a
 **Why the hourly cost is derived twice.** `economics.py` routes to €/hour from annual revenue and, independently, from revenue-per-call times the observed call rate. They agree to ratio 1.00 on a matched call basis. The cross-check paid for itself immediately: it caught a 15× unit error the first time it ran.
 
 **Why AIS calls are stitched across midnight.** DMA publishes daily files, so a vessel alongside for three days looks like three 24-hour calls, and the dwell p90 pins at 23.9 h for reasons that have nothing to do with berth occupancy. Stitching plus a truncation tolerance wider than AIS's own 3-minute reporting interval moved the Passenger median from 9.01 h to 2.70 h — a real ropax turnaround, matching observation.
+
+## Deploying
+
+```bash
+./deploy/huggingface/sync.sh <user>/portscra
+```
+
+Pushes `main` to a Hugging Face Space with the Space README swapped in, leaving the working tree untouched. The frontmatter Spaces needs lives in `deploy/huggingface/README.md` rather than here, because it renders as a metadata table on GitHub. See [DEPLOY.md](deploy/huggingface/DEPLOY.md).
 
 ## Requirements
 
