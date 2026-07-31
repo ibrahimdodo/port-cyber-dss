@@ -7,7 +7,7 @@ A decision support system that answers two questions for a port too small to hav
 
 Every accessible tool in this space — [CISA CSET](https://www.cisa.gov/resources-tools/services/cyber-security-evaluation-tool-csetr), [MONARC](https://www.monarc.lu/), SimpleRisk — stops at a qualitative heat map. Commercial platforms (BitSight, SecurityScorecard, UpGuard) are black-box, enterprise-priced and port-blind. This project quantifies instead, in the port's own operational terms, and then optimises the spend.
 
-> **Status: in development.** The risk engine, ENISA-derived taxonomies, AIS pipeline and vendor-likelihood engine are built and tested. The control optimiser and Streamlit dashboard are next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
+> **Status: in development.** The full analytical chain is built and tested — ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, and the budget-constrained control optimiser. The Streamlit dashboard is next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
 
 ---
 
@@ -54,6 +54,10 @@ python scripts/demo_vendors.py
 python scripts/demo_vendors.py --ahp     # pairwise criterion weighting
 python scripts/demo_vendors.py --nis2    # NIS2 Article 21 coverage
 
+# Choose a mitigation portfolio under a budget
+python scripts/demo_optimise.py --budget 25000
+python scripts/demo_optimise.py --ig 1   # essential cyber hygiene only
+
 # Tests
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
@@ -79,16 +83,35 @@ Two things there are the point of the whole project.
 
 **The ranking is not the intuitive one.** With a placeholder hourly cost the dramatic ransomware scenario ranked first. Once the hourly figure is *derived* — €659/h, because a small port's revenue per hour is genuinely modest — invoice fraud overtakes it, since that loss is direct and unrecoverable rather than deferred. A heat map would almost certainly have marked ransomware "critical" and business email compromise "medium".
 
+And the answer to Problem #1 — given €25,000, what should this port buy?
+
+```
+Expected annual loss EUR 113,987 -> EUR 26,007 (77% reduction, ROSI +2.5x)
+
+  C20  EUR 5,000  IG1  Incident response plan with exercises
+  C02  EUR 4,000  IG1  Named vendor accounts with session logging
+  C10  EUR 4,000  IG1  Asset and software inventory
+  C01  EUR 3,000  IG1  Multi-factor authentication on all accounts
+  ... 4 more
+
+Mean falls 77%; the P99 tail falls only 64%.
+```
+
+Seven of the eight selected controls are CIS Implementation Group 1 — "essential cyber hygiene" — which is a result rather than a constraint: nothing restricted the optimiser to IG1, it simply bought the cheap fundamentals first.
+
+The efficient frontier shows where spending stops paying: **ROSI turns negative at full-catalogue spend (−0.3×)**. Buying everything is worse than buying the right subset, which is the sort of finding a compliance checklist structurally cannot produce.
+
 ## Layout
 
 | Path | Contents |
 |---|---|
 | `src/portscra/risk/` | PERT distributions, FAIR Monte Carlo engine, port economics |
 | `src/portscra/vendor/` | NIS2-mapped questionnaire, AHP weighting, likelihood fusion |
+| `src/portscra/controls/` | CIS Controls v8 catalogue, knapsack optimiser, tornado sensitivity |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
-| `scripts/` | `day_one.py` (validation), `build_dataset.py` (seasonal ETL), `demo_risk.py`, `demo_vendors.py` |
-| `tests/` | 149 tests, stdlib `unittest`, no external runner needed |
+| `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py` |
+| `tests/` | 183 tests, stdlib `unittest`, no external runner needed |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 
