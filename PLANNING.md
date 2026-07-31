@@ -129,6 +129,24 @@ Validated by two independent routes: annual-revenue-over-hours and revenue-per-c
 
 **The derived figure changes the answer, and that is the point.** At the €2,500/h placeholder, MSP ransomware (S2) ranked first. At the derived €659/h, **SaaS account takeover leading to invoice fraud (S3) overtakes it** — €33.3k ALE versus €27.8k. The reason is structural: a small port's hourly revenue is modest, so downtime-driven scenarios carry less weight than a direct unrecoverable cash loss. A qualitative matrix would almost certainly have rated ransomware "critical" and business email compromise "medium". This is the concrete example of quantitative assessment overturning intuition that the report needs.
 
+5h. **Vendor likelihood engine built (2026-07-31).** The piece that turns seven generic scenario frequencies into per-vendor ones. Three modules under `src/portscra/vendor/`, 51 new tests.
+
+**AHP weighting (`ahp.py`).** Principal-eigenvector method with Saaty's consistency ratio. The original brief offered teacher help with "criteria ranking"; solo, that elicitation becomes a *product feature* instead — the app runs the pairwise session with the user and checks whether their judgements cohere, rather than shipping weights we chose. `weights_from_ranking()` gives rank-order-centroid weights for users who decline the exercise. Correctness is pinned by exact properties: a perfectly consistent matrix (a[i,j] = wᵢ/wⱼ) must recover its own generating vector with CR = 0 and λmax = n exactly.
+
+**Questionnaire (`questionnaire.py`).** 20 questions across 7 criteria, each mapped to NIS2 Article 21(2) points, so running it simultaneously produces the supply-chain diligence evidence the directive requires. Kept short deliberately — a small port has no leverage to send a 300-question Shared Assessments SIG to its crane OEM and expect a reply. The seven criteria are chosen for what moves risk *for a port*: access and privilege, asset criticality, posture, update-channel integrity, incident history, data exposure, substitutability.
+
+**Fusion (`likelihood.py`).** Questionnaire evidence sets a posture score; external signals (EPSS, CISA KEV, OpenSSF Scorecard, recent breach) adjust it; the product scales a documented base-rate prior — PERT(0.02, 0.05, 0.12), anchored on the supply-chain incident cadence 2020–2024 and DBIR's third-party involvement trend — into a per-vendor probability band.
+
+Four design decisions worth defending in the report:
+- **An unassessed vendor scores 0.5, not 0.** If silence produced a good score, refusing the questionnaire would be the cheapest way to look safe. Coverage is always reported beside the number.
+- **Signals are asymmetric.** KEV presence multiplies risk substantially; absence lowers it only slightly. Most software never gets the scrutiny that would put it in KEV, so absence is weak evidence of safety.
+- **Partial answers are judged on what was answered**, renormalising over scored criteria only — a vendor answering just the access questions badly is not credited for the ones it skipped.
+- **Exposure multiplier is geometric, not linear** (0.4×–2.5×): risk multipliers compound, so good→average should be the same *factor* as average→poor. Bounded on purpose — no questionnaire justifies claiming a supplier is twenty times safer than average.
+
+**Demonstration** (`scripts/demo_vendors.py`, illustrative roles not real companies — naming real vendors would assert things about their posture this project has no evidence for). On a plausible eight-supplier list for a port of Rønne's size, the ranking is instructive: the **gate/ANPR/CCTV integrator** comes top at 5.3–31.9%/yr (most likely 13.3%), ahead of the MSP — poor update-channel integrity plus a KEV entry outweighs the MSP's broader access. The **open-source component** cannot be sent a questionnaire at all and is assessed purely on OpenSSF Scorecard and EPSS: the brief's "freeware?" case, handled by design rather than by exception.
+
+The AHP demo session returns CR = 0.044 (acceptable) and weights that closely track the literature defaults — access 0.238 against a default of 0.24. Independent derivations landing in the same place is mild evidence both are reasonable.
+
 6. **Scope reshaped for solo build** — vertical slice first: 100-mixed persona, ~10 vendors, 7 scenarios, full pipeline (inventory → likelihood → consequence → Monte Carlo → optimizer → dashboard). **Backlog (build only after the slice works end-to-end):** awareness module, SimPy outage simulation, 10/50 persona calibration, SBOM ingestion.
 7. **Portfolio-grade deliverable standards**: README as the report (architecture diagram, methodology, screenshots), reproducible pipeline (scripts + one bundled sample-day extract so others can run without the 17 GB download), tests on the Monte Carlo core and optimizer, deployed demo on HF Spaces.
 

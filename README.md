@@ -7,7 +7,7 @@ A decision support system that answers two questions for a port too small to hav
 
 Every accessible tool in this space — [CISA CSET](https://www.cisa.gov/resources-tools/services/cyber-security-evaluation-tool-csetr), [MONARC](https://www.monarc.lu/), SimpleRisk — stops at a qualitative heat map. Commercial platforms (BitSight, SecurityScorecard, UpGuard) are black-box, enterprise-priced and port-blind. This project quantifies instead, in the port's own operational terms, and then optimises the spend.
 
-> **Status: in development.** The risk engine, ENISA-derived taxonomies and AIS pipeline are built and tested. The vendor-likelihood engine, control optimiser and Streamlit dashboard are next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
+> **Status: in development.** The risk engine, ENISA-derived taxonomies, AIS pipeline and vendor-likelihood engine are built and tested. The control optimiser and Streamlit dashboard are next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
 
 ---
 
@@ -49,6 +49,11 @@ python scripts/day_one.py --date 2026-03-02
 python scripts/build_dataset.py
 python scripts/build_dataset.py --aggregate-only   # re-run stats only
 
+# Rank a supplier list by compromise likelihood
+python scripts/demo_vendors.py
+python scripts/demo_vendors.py --ahp     # pairwise criterion weighting
+python scripts/demo_vendors.py --nis2    # NIS2 Article 21 coverage
+
 # Tests
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
@@ -79,10 +84,11 @@ Two things there are the point of the whole project.
 | Path | Contents |
 |---|---|
 | `src/portscra/risk/` | PERT distributions, FAIR Monte Carlo engine, port economics |
+| `src/portscra/vendor/` | NIS2-mapped questionnaire, AHP weighting, likelihood fusion |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
-| `scripts/` | `day_one.py` (validation), `build_dataset.py` (seasonal ETL), `demo_risk.py` (engine) |
-| `tests/` | 98 tests, stdlib `unittest`, no external runner needed |
+| `scripts/` | `day_one.py` (validation), `build_dataset.py` (seasonal ETL), `demo_risk.py`, `demo_vendors.py` |
+| `tests/` | 149 tests, stdlib `unittest`, no external runner needed |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 
@@ -103,6 +109,10 @@ A [Kaggle AIS dataset near Tallinn](https://www.kaggle.com/datasets/gaborvisky/a
 **Why every estimate carries a `source` string.** An estimate without provenance is a guess wearing a lab coat. There is a test that fails if any scenario input lacks one.
 
 **Why the taxonomies are code, not a spreadsheet.** Tests verify that every scenario's referenced threats, impacts and assets actually exist, so a typo cannot silently produce a scenario that contributes nothing.
+
+**Why an unassessed vendor scores mid-range, not low.** If skipping the questionnaire produced a good score, the cheapest route to looking safe would be silence. A vendor with no evidence lands at 0.5 posture, and coverage is always reported next to the number.
+
+**Why signals are asymmetric.** Appearing in CISA KEV raises risk sharply; *not* appearing lowers it only slightly. Most software never receives the scrutiny that would put it there, so absence is weak evidence of safety while presence is strong evidence of danger.
 
 **Why the hourly cost is derived twice.** `economics.py` routes to €/hour from annual revenue and, independently, from revenue-per-call times the observed call rate. They agree to ratio 1.00 on a matched call basis. The cross-check paid for itself immediately: it caught a 15× unit error the first time it ran.
 
