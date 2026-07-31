@@ -20,7 +20,7 @@ Nothing else differs between the GitHub repo and the Space.
 3. Authenticate. Spaces uses a write token as the password:
    <https://huggingface.co/settings/tokens>
 
-##每 deploy
+## Every deploy
 
 ```bash
 ./deploy/huggingface/sync.sh <user>/portscra
