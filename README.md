@@ -162,6 +162,14 @@ That feedback is scaled by how much of each scenario is plausibly under human co
 
 Moving from untrained to well-trained is worth **€34,982/yr** in expected loss against a €3,500 control. The management score is reported separately, because NIS2 Article 20(2) obliges the management body *itself* to train — and an organisational average can look healthy while the people carrying the legal duty are the weakest group.
 
+### Read it as a walkthrough
+
+The [notebooks](notebooks/) follow the pipeline end to end with outputs committed, so
+they render on GitHub without running anything: [the port and the
+numbers](notebooks/01_the_port_and_the_numbers.ipynb) → [suppliers](notebooks/02_suppliers.ipynb)
+→ [risk](notebooks/03_risk.ipynb) → [the decision](notebooks/04_the_decision.ipynb) →
+[validation](notebooks/05_validation.ipynb).
+
 ## Layout
 
 | Path | Contents |
@@ -177,6 +185,7 @@ Moving from untrained to well-trained is worth **€34,982/yr** in expected loss
 | `src/portscra/requirements.py` | Supplier security requirements, scoped by asset, with gap analysis |
 | `src/portscra/maturity.py` | ENISA phase-four maturity self-assessment |
 | `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
+| `notebooks/` | Five narrative notebooks with outputs committed — the readable walkthrough |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |

@@ -4,8 +4,11 @@ data/
 *.csv
 !tests/**/*.csv
 
-# Derived artefacts are cheap to regenerate.
+# Derived artefacts are cheap to regenerate — except the combined port-call
+# table, which is 82 kB and is what lets the notebooks run without an 18 GB
+# AIS download.
 *.parquet
+!data/processed/portcalls-all.parquet
 
 __pycache__/
 *.py[cod]
