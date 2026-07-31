@@ -11,6 +11,11 @@ different callers need it -- the pipeline demo, the dashboard, and any notebook
 -- and importing data out of a script requires a `sys.path` hack that breaks the
 moment the app is deployed somewhere the scripts directory is not.
 
+No signal here is a fabricated feed value. Where a supplier has no CVE or
+repository recorded, its signals are simply empty, because inventing an EPSS
+score or a KEV hit would assert something only the feed can say. Run
+`scripts/refresh_signals.py` to populate them from live sources.
+
 Replace `EXAMPLE_VENDORS` with real questionnaire responses to assess a real
 port. Nothing else in the codebase needs to change.
 """
@@ -45,7 +50,9 @@ EXAMPLE_VENDORS: list[Vendor] = [
         answers=answers(Q1=1, Q2=2, Q3=2, Q4=0, Q5=0, Q6=2, Q7=3, Q8=2, Q9=2,
                         Q10=2, Q11=1, Q12=1, Q13=1, Q14=2, Q15=3, Q16=2, Q17=1,
                         Q18=2, Q19=0, Q20=0),
-        signals=VendorSignals(max_epss=0.12, source="illustrative"),
+        # No fabricated feed values. A real port records the CVEs affecting
+        # its TOS release and `signals.py` looks them up; inventing an EPSS
+        # score here would assert something only the feed can say.
         notes="Operations stop without it and replacement would take years. "
               "The SolarWinds vector runs through its update channel.",
     ),
@@ -73,7 +80,6 @@ EXAMPLE_VENDORS: list[Vendor] = [
         answers=answers(Q1=1, Q2=1, Q3=1, Q4=1, Q5=1, Q6=1, Q7=0, Q8=0, Q9=0,
                         Q10=1, Q11=0, Q12=0, Q13=0, Q14=0, Q15=1, Q16=1, Q17=1,
                         Q18=1, Q19=2, Q20=2),
-        signals=VendorSignals(kev_count=1, max_epss=0.35, source="illustrative"),
         notes="The least-patched estate in most ports; the Antwerp "
               "container-release manipulation ran through this class of system.",
     ),
@@ -92,7 +98,11 @@ EXAMPLE_VENDORS: list[Vendor] = [
         answers=answers(Q1=2, Q2=2, Q3=2, Q4=1, Q5=1, Q6=3, Q7=2, Q8=1, Q9=1,
                         Q10=1, Q11=1, Q12=2, Q13=1, Q14=1, Q15=1, Q16=2, Q17=0,
                         Q18=2, Q19=1, Q20=1),
-        signals=VendorSignals(recent_breach=True, source="illustrative"),
+        # Legitimately hand-recorded: no public feed reports "this supplier
+        # disclosed a breach to us", so this survives live enrichment rather
+        # than being overwritten by it. Illustrative for this worked example.
+        signals=VendorSignals(recent_breach=True,
+                              source="illustrative port-recorded disclosure"),
         notes="Holds passenger personal data at volume -- GDPR and NIS2 exposure.",
     ),
     Vendor(
@@ -101,8 +111,15 @@ EXAMPLE_VENDORS: list[Vendor] = [
         # No questionnaire is possible: there is no vendor to send it to. This
         # is the brief's "freeware?" case, and the reason external signals are
         # not optional.
-        signals=VendorSignals(openssf_scorecard=3.2, max_epss=0.08,
-                              source="illustrative OpenSSF Scorecard"),
+        # Real identifiers, so `signals.py` can demonstrate live enrichment.
+        # The component stands in for a compression library of the kind the
+        # xz-utils backdoor targeted; the CVE and repository are genuine, the
+        # claim that this port depends on them is illustrative.
+        cve_ids=("CVE-2024-3094",),
+        repository="github.com/tukaani-project/xz",
+        # Placeholder until `scripts/refresh_signals.py` replaces these with
+        # live EPSS and Scorecard values for the identifiers above.
+        signals=VendorSignals(source="illustrative, pending live enrichment"),
         notes="Nobody to send a questionnaire to. Assessed entirely on public "
               "signals; the xz-utils backdoor was this shape.",
     ),

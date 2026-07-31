@@ -90,6 +90,13 @@ class Vendor:
     #: Question id -> chosen option index. Partial answers are fine.
     answers: dict[str, int] = field(default_factory=dict)
     signals: VendorSignals = field(default_factory=VendorSignals)
+    #: CVE identifiers affecting the supplied product, if known. The port knows
+    #: what software it runs; `signals.py` turns that into EPSS and KEV lookups.
+    cve_ids: tuple[str, ...] = ()
+    #: Repository for an open-source component, e.g. "github.com/curl/curl",
+    #: used for the OpenSSF Scorecard lookup. The brief's "freeware?" case has
+    #: no vendor to question, so this is the only assessment available.
+    repository: str | None = None
     notes: str = ""
 
     @property

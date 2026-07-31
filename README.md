@@ -53,6 +53,10 @@ python scripts/day_one.py --date 2026-03-02
 python scripts/build_dataset.py
 python scripts/build_dataset.py --aggregate-only   # re-run stats only
 
+# Pull live EPSS / CISA KEV / OpenSSF Scorecard for the supplier list
+python scripts/refresh_signals.py
+python scripts/refresh_signals.py --offline   # show graceful degradation
+
 # Rank a supplier list by compromise likelihood
 python scripts/demo_vendors.py
 python scripts/demo_vendors.py --ahp     # pairwise criterion weighting
@@ -150,11 +154,12 @@ Same scenarios, same budget, both methods. The result is more interesting than "
 | `src/portscra/graph.py` | Dependency graph: vendor → asset → port service, derived frequencies |
 | `src/portscra/validation.py` | Incident replay, 5×5 matrix baseline, range compression |
 | `src/portscra/examples.py` | The worked example supplier list (illustrative roles, not real firms) |
+| `src/portscra/signals.py` | Live EPSS, CISA KEV and OpenSSF Scorecard, cached with a TTL |
 | `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
-| `tests/` | 253 tests, stdlib `unittest`, no external runner needed |
+| `tests/` | 277 tests, stdlib `unittest`, no external runner needed (signal tests use a fake session, so the suite runs offline) |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 
@@ -178,7 +183,9 @@ A [Kaggle AIS dataset near Tallinn](https://www.kaggle.com/datasets/gaborvisky/a
 
 **Why an unassessed vendor scores mid-range, not low.** If skipping the questionnaire produced a good score, the cheapest route to looking safe would be silence. A vendor with no evidence lands at 0.5 posture, and coverage is always reported next to the number.
 
-**Why signals are asymmetric.** Appearing in CISA KEV raises risk sharply; *not* appearing lowers it only slightly. Most software never receives the scrutiny that would put it there, so absence is weak evidence of safety while presence is strong evidence of danger.
+**Why signals are asymmetric.** Appearing in CISA KEV raises risk sharply; *not* appearing lowers it only slightly. Most software never receives the scrutiny that would put it there, so absence is weak evidence of safety while presence is strong evidence of danger. The live feeds make this concrete: **CVE-2024-3094 — the xz-utils backdoor — scores 0.86 on EPSS but is absent from KEV**, because it was caught before exploitation. One of the most serious supply-chain compromises yet found would score clean on a KEV-only check.
+
+**Why no signal is ever typed by hand.** EPSS scores and KEV hits are things only a feed can report, so the example data carries *identifiers* (CVE ids, repository URLs) and leaves the signals empty until `refresh_signals.py` populates them. An earlier version typed them in, and it inflated one supplier's assessed risk from 7.6% to 13.3% on invented evidence. A test now fails if any hand-typed feed value reappears.
 
 **Why the hourly cost is derived twice.** `economics.py` routes to €/hour from annual revenue and, independently, from revenue-per-call times the observed call rate. They agree to ratio 1.00 on a matched call basis. The cross-check paid for itself immediately: it caught a 15× unit error the first time it ran.
 
@@ -203,7 +210,9 @@ from portscra.controls import CATALOGUE, optimise
 - The Open Group, Open FAIR (O-RT, O-RA) — risk quantification standard
 - Hubbard & Seiersen, *How to Measure Anything in Cybersecurity Risk* — calibrated estimation
 - [MITRE ATT&CK](https://attack.mitre.org/) — technique identifiers, including ATT&CK for ICS
-- [EPSS](https://www.first.org/epss/) (FIRST) — daily exploitation probability per CVE
+- [EPSS](https://www.first.org/epss/) (FIRST) — daily exploitation probability per CVE, fetched live
+- [CISA KEV](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) — known-exploited catalogue, fetched live
+- [OpenSSF Scorecard](https://securityscorecards.dev/) — open-source hygiene score, fetched live
 - CIS Controls v8 — the mitigation catalogue (IG1 for the smallest persona)
 - [Danmarks Statistik SKIB101](https://www.statbank.dk/SKIB101) — official Danish port call, cargo and passenger statistics
 - Rønne Havn A/S, Årsrapport 2024 (CVR 27932150) — revenue, EBITDA and headcount behind the €/hour derivation

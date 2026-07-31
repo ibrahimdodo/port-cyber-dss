@@ -53,18 +53,39 @@ class TestExampleVendors(unittest.TestCase):
 
     def test_the_freeware_case_has_no_questionnaire(self):
         """The brief's 'freeware?' case: there is no vendor to send a
-        questionnaire to, so it must rest entirely on public signals."""
+        questionnaire to, so it must be assessable from public sources alone --
+        which means carrying the identifiers those sources are keyed on."""
         oss = next(v for v in EXAMPLE_VENDORS if v.category == "freeware")
         self.assertEqual(oss.answers, {})
-        self.assertTrue(oss.signals.has_any)
+        self.assertTrue(oss.cve_ids or oss.repository,
+                        "the freeware case has neither questionnaire nor "
+                        "identifiers, so nothing could ever assess it")
 
-    def test_illustrative_signals_are_labelled_as_such(self):
-        """These are worked-example figures, not findings about real suppliers.
-        The label has to travel with the data."""
+    def test_no_fabricated_feed_values(self):
+        """EPSS scores and KEV hits are things only a feed can report. Typing
+        one by hand asserts something we have not looked up, and an earlier
+        version of this file did exactly that -- inflating one supplier's risk
+        from 7.6% to 13.3% on invented evidence."""
+        for vendor in EXAMPLE_VENDORS:
+            self.assertIsNone(vendor.signals.max_epss,
+                              f"{vendor.key} has a hand-typed EPSS score")
+            self.assertEqual(vendor.signals.kev_count, 0,
+                             f"{vendor.key} has a hand-typed KEV count")
+            self.assertIsNone(vendor.signals.openssf_scorecard,
+                              f"{vendor.key} has a hand-typed Scorecard value")
+
+    def test_hand_recorded_signals_are_labelled_illustrative(self):
+        """A disclosed breach is legitimately hand-recorded -- no feed reports
+        it -- but in a worked example it must still be labelled as illustrative."""
         for vendor in EXAMPLE_VENDORS:
             if vendor.signals.has_any:
                 self.assertIn("illustrative", vendor.signals.source.lower(),
                               f"{vendor.key} has unlabelled signals")
+
+    def test_at_least_one_vendor_can_be_enriched(self):
+        """Otherwise the live-signal path is never exercised by the example."""
+        enrichable = [v for v in EXAMPLE_VENDORS if v.cve_ids or v.repository]
+        self.assertTrue(enrichable)
 
     def test_no_real_company_names(self):
         """Naming real suppliers would assert things about their security
