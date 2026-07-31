@@ -36,6 +36,8 @@ vendors ──> assets ──> port services        (dependency graph, ENISA tax
 
 **Threat identification** = ENISA port threat taxonomy (domain skeleton) × MITRE ATT&CK techniques (concrete vectors) × STRIDE (completeness audit only) — following PASTA's risk-centric philosophy rather than STRIDE's software-centric one.
 
+**All four ENISA phases** from *Cyber Risk Management for Ports* (2020) are implemented: identify assets and services (taxonomy + dependency graph), identify and evaluate risks (FAIR Monte Carlo), identify security measures (control optimiser), and assess maturity (`maturity.py`). The portfolio implies a maturity profile, so a budget reads in ENISA's terms as well as in euro — and buying every control still lands at 2.42 of 3, because ENISA is explicit that maturity cannot be reached through a checklist mentality.
+
 ## What works today
 
 ```bash
@@ -52,6 +54,10 @@ python scripts/day_one.py --date 2026-03-02
 # Build the four-season port-call dataset (~18 GB downloaded, then discarded)
 python scripts/build_dataset.py
 python scripts/build_dataset.py --aggregate-only   # re-run stats only
+
+# Supplier security requirements and ENISA maturity
+python scripts/demo_requirements.py
+python scripts/demo_requirements.py --vendor msp --clauses
 
 # Awareness assessment generated from this port's top risks
 python scripts/demo_awareness.py
@@ -168,11 +174,13 @@ Moving from untrained to well-trained is worth **€34,982/yr** in expected loss
 | `src/portscra/examples.py` | The worked example supplier list (illustrative roles, not real firms) |
 | `src/portscra/signals.py` | Live EPSS, CISA KEV and OpenSSF Scorecard, cached with a TTL |
 | `src/portscra/awareness.py` | Risk-driven awareness vignettes that feed back into the frequencies |
+| `src/portscra/requirements.py` | Supplier security requirements, scoped by asset, with gap analysis |
+| `src/portscra/maturity.py` | ENISA phase-four maturity self-assessment |
 | `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
-| `tests/` | 312 tests, stdlib `unittest`, no external runner needed (signal tests use a fake session, so the suite runs offline) |
+| `tests/` | 357 tests, stdlib `unittest`, no external runner needed (signal tests use a fake session, so the suite runs offline) |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 
