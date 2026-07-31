@@ -1,20 +1,22 @@
-# Currently required -- everything implemented today runs on these.
+# Required. Everything in src/ and scripts/ runs on these.
 numpy>=1.26
-scipy>=1.11
 pandas>=2.0
 pyarrow>=14.0
 requests>=2.31
 
-# Planned -- needed by phases not yet built.
-# streamlit>=1.30     # dashboard (phase 5)
-# plotly>=5.18        # exceedance curves, tornado charts (phase 4-5)
-# pulp>=2.7           # knapsack optimiser for control selection (phase 4)
+# Required for the dashboard only (app/streamlit_app.py).
+streamlit>=1.30
+
+# Planned -- not yet imported by any module.
+# pulp>=2.7          # exact ILP for control selection; greedy + local search
+#                    # currently matches brute force on every tested instance
+# simpy>=4.0         # discrete-event outage simulation (backlog)
 
 # Optional -- faster AIS scans on multi-week pulls. The pipeline uses pyarrow
 # streaming by default and does not require these.
 # polars>=0.20
 # duckdb>=0.10
 
-# Testing uses the standard library (unittest); pytest is optional and will
+# Tests use the standard library (unittest); pytest is optional and will
 # discover the same tests unchanged.
 # pytest>=7.4

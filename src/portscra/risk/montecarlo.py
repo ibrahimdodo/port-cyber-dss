@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .distributions import Distribution, PERT
+from .distributions import Distribution
 
 __all__ = ["LossMagnitude", "Scenario", "SimulationResult", "simulate"]
 

@@ -30,7 +30,6 @@ sys.path.insert(0, str(REPO / "src"))
 
 from portscra.controls import CATALOGUE, apply_controls, optimise  # noqa: E402
 from portscra.graph import (  # noqa: E402
-    SERVICES,
     DependencyGraph,
     build_scenarios_from_vendors,
 )

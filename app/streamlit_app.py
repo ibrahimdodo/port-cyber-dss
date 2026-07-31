@@ -24,7 +24,6 @@ import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
 from portscra.controls import (  # noqa: E402
-    CATALOGUE,
     apply_controls,
     catalogue_for_group,
     efficient_frontier,
@@ -32,7 +31,6 @@ from portscra.controls import (  # noqa: E402
     tornado,
 )
 from portscra.graph import (  # noqa: E402
-    SERVICES,
     DependencyGraph,
     build_scenarios_from_vendors,
 )

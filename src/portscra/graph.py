@@ -32,7 +32,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from .risk.distributions import Distribution
-from .risk.montecarlo import LossMagnitude, Scenario
+from .risk.montecarlo import Scenario
 from .taxonomy.assets import find_asset
 from .taxonomy.scenarios import SCENARIO_TEMPLATES, ScenarioTemplate
 from .vendor.likelihood import Vendor, VendorAssessment

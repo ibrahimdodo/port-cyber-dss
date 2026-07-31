@@ -17,7 +17,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
 from portscra.controls import CATALOGUE  # noqa: E402
-from portscra.risk import RONNE_2024, OutageCostPerHour, simulate  # noqa: E402
+from portscra.risk import RONNE_2024, OutageCostPerHour  # noqa: E402
 from portscra.taxonomy import build_scenarios  # noqa: E402
 from portscra.taxonomy.scenarios import SCENARIO_TEMPLATES  # noqa: E402
 from portscra.validation import (  # noqa: E402

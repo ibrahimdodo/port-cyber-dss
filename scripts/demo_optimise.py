@@ -21,8 +21,6 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "src"))
 
-import numpy as np  # noqa: E402
-
 from portscra.controls import (  # noqa: E402
     CATALOGUE,
     apply_controls,
