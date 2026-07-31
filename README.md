@@ -53,6 +53,10 @@ python scripts/day_one.py --date 2026-03-02
 python scripts/build_dataset.py
 python scripts/build_dataset.py --aggregate-only   # re-run stats only
 
+# Awareness assessment generated from this port's top risks
+python scripts/demo_awareness.py
+python scripts/demo_awareness.py --show-quiz
+
 # Pull live EPSS / CISA KEV / OpenSSF Scorecard for the supplier list
 python scripts/refresh_signals.py
 python scripts/refresh_signals.py --offline   # show graceful degradation
@@ -144,6 +148,14 @@ Same scenarios, same budget, both methods. The result is more interesting than "
 
 *A matrix can rank well and still allocate badly*, because it cannot see that a cheap control touching four amber risks beats an expensive one touching a single red. The test suite asserts rank agreement > 0.5 so the baseline stays a fair opponent rather than a straw man.
 
+### Awareness that is actually about this port
+
+The brief asks to "identify cyber-security awareness level for **specific** vendor-related risks". So the vignettes are not a fixed course — they are selected in the order the risk engine ranked the scenarios, and the measured score feeds back into the frequencies.
+
+That feedback is scaled by how much of each scenario is plausibly under human control: training moves invoice fraud by 0.40× and a signed trojanized update by 0.95×. A tool claiming to reduce every risk equally would be selling training rather than measuring it.
+
+Moving from untrained to well-trained is worth **€34,982/yr** in expected loss against a €3,500 control. The management score is reported separately, because NIS2 Article 20(2) obliges the management body *itself* to train — and an organisational average can look healthy while the people carrying the legal duty are the weakest group.
+
 ## Layout
 
 | Path | Contents |
@@ -155,11 +167,12 @@ Same scenarios, same budget, both methods. The result is more interesting than "
 | `src/portscra/validation.py` | Incident replay, 5×5 matrix baseline, range compression |
 | `src/portscra/examples.py` | The worked example supplier list (illustrative roles, not real firms) |
 | `src/portscra/signals.py` | Live EPSS, CISA KEV and OpenSSF Scorecard, cached with a TTL |
+| `src/portscra/awareness.py` | Risk-driven awareness vignettes that feed back into the frequencies |
 | `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
-| `tests/` | 277 tests, stdlib `unittest`, no external runner needed (signal tests use a fake session, so the suite runs offline) |
+| `tests/` | 312 tests, stdlib `unittest`, no external runner needed (signal tests use a fake session, so the suite runs offline) |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 

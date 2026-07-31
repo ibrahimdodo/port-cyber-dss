@@ -23,6 +23,13 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
 
+from portscra.awareness import (  # noqa: E402
+    HUMAN_FACTOR_WEIGHT,
+    ROLE_NAMES,
+    apply_awareness,
+    score_responses,
+    vignettes_for,
+)
 from portscra.controls import (  # noqa: E402
     apply_controls,
     catalogue_for_group,
@@ -128,8 +135,9 @@ scenarios = (
 )
 portfolio = optimise(scenarios, catalogue, budget)
 
-tab_overview, tab_vendors, tab_risk, tab_optimise, tab_validate = st.tabs(
-    ["Overview", "Suppliers", "Risk", "Portfolio", "Validation"])
+(tab_overview, tab_vendors, tab_risk, tab_optimise, tab_aware,
+ tab_validate) = st.tabs(
+    ["Overview", "Suppliers", "Risk", "Portfolio", "Awareness", "Validation"])
 
 # --------------------------------------------------------------- overview
 with tab_overview:
@@ -365,6 +373,76 @@ with tab_optimise:
             "Residual loss if each control proves 50% better or worse than "
             "assumed. Wide bars are worth researching before committing budget; "
             "narrow ones are assumptions that do not change the answer."
+        )
+
+# --------------------------------------------------------------- awareness
+with tab_aware:
+    st.subheader("Awareness, generated from this port's top risks")
+    st.caption(
+        "Not a fixed course. Vignettes are selected in the order the risk "
+        "engine ranked the scenarios, so the training leads with what actually "
+        "threatens this port — and the measured score feeds back into the "
+        "frequencies, closing the loop."
+    )
+
+    from portscra.controls.optimiser import scenario_ale as _ale
+    ranked_ids = [s.id for s in sorted(scenarios, key=_ale, reverse=True)]
+    selected = vignettes_for(ranked_ids)
+
+    st.markdown("##### Answer as your staff would")
+    responses = {}
+    for vignette in selected:
+        with st.expander(
+            f"{vignette.id} · {ROLE_NAMES[vignette.role]} · {NAMES[vignette.scenario_id]}"
+        ):
+            st.write(vignette.situation)
+            st.write(f"**{vignette.question}**")
+            choice = st.radio(
+                "Answer", options=list(range(len(vignette.options))),
+                format_func=lambda i, v=vignette: v.options[i].text,
+                key=f"aw-{vignette.id}", label_visibility="collapsed",
+            )
+            responses[vignette.id] = choice
+            option = vignette.options[choice]
+            (st.success if option.correct else st.warning)(option.feedback)
+            if vignette.anchor:
+                st.caption(f"Anchor: {vignette.anchor}")
+
+    if responses:
+        result = score_responses(responses)
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Awareness score", f"{result.overall:.0%}",
+                  delta=f"{result.correct}/{result.answered} correct",
+                  delta_color="off")
+        gap = result.management_gap()
+        a2.metric("Management gap",
+                  f"{gap:+.0%}" if gap is not None else "n/a",
+                  delta="NIS2 Art. 20(2) duty", delta_color="off",
+                  help="Management bodies must themselves undergo training. An "
+                       "organisational average can hide a board that has not.")
+        aware_scenarios = apply_awareness(scenarios, result)
+        from portscra.controls.optimiser import baseline_ale as _base
+        a3.metric("Expected annual loss", eur(_base(aware_scenarios)),
+                  delta=f"vs {eur(_base(scenarios))} unassessed", delta_color="off")
+
+        st.markdown("##### How much training can move each risk")
+        st.caption(
+            "Scaled by how much of each scenario is plausibly under human "
+            "control. A tool claiming to reduce every risk equally would be "
+            "selling training rather than measuring it."
+        )
+        st.dataframe(
+            pd.DataFrame([
+                {"Scenario": NAMES[sid],
+                 "Human factor": HUMAN_FACTOR_WEIGHT.get(sid, 0.0),
+                 "Frequency x at this score":
+                     round(__import__("portscra.awareness", fromlist=["x"])
+                           .awareness_multiplier(result, sid), 2)}
+                for sid in ranked_ids
+            ]),
+            hide_index=True, width="stretch",
+            column_config={"Human factor": st.column_config.ProgressColumn(
+                "Human factor", format="%.0f%%", min_value=0.0, max_value=1.0)},
         )
 
 # --------------------------------------------------------------- validate
