@@ -7,7 +7,7 @@ A decision support system that answers two questions for a port too small to hav
 
 Every accessible tool in this space — [CISA CSET](https://www.cisa.gov/resources-tools/services/cyber-security-evaluation-tool-csetr), [MONARC](https://www.monarc.lu/), SimpleRisk — stops at a qualitative heat map. Commercial platforms (BitSight, SecurityScorecard, UpGuard) are black-box, enterprise-priced and port-blind. This project quantifies instead, in the port's own operational terms, and then optimises the spend.
 
-> **Status: in development.** The full analytical chain is built, connected and validated — ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, dependency graph, control optimiser and a validation suite that replays real incidents and duels a 5×5 matrix. The Streamlit dashboard is next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
+> **Status: feature-complete for the analytical chain.** ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, dependency graph, control optimiser, validation suite and an interactive Streamlit dashboard. Remaining: deployment, awareness module, SimPy outage simulation. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
 
 ---
 
@@ -63,6 +63,9 @@ python scripts/demo_pipeline.py
 
 # Validation: incident replay, 5x5 matrix duel, persona sweep
 python scripts/validate.py
+
+# Interactive dashboard
+python -m streamlit run app/streamlit_app.py
 
 # Tests
 PYTHONPATH=src python3 -m unittest discover -s tests
@@ -142,10 +145,11 @@ Same scenarios, same budget, both methods. The result is more interesting than "
 | `src/portscra/controls/` | CIS Controls v8 catalogue, knapsack optimiser, tornado sensitivity |
 | `src/portscra/graph.py` | Dependency graph: vendor → asset → port service, derived frequencies |
 | `src/portscra/validation.py` | Incident replay, 5×5 matrix baseline, range compression |
+| `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
-| `tests/` | 236 tests, stdlib `unittest`, no external runner needed |
+| `tests/` | 243 tests, stdlib `unittest`, no external runner needed |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 

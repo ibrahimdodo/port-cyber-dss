@@ -121,3 +121,53 @@ class TestCrossCheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestScaledPersonas(unittest.TestCase):
+    """The brief's 10/50/100 personas need the economics scaled, not only the
+    response costs. Holding revenue fixed while scaling costs produced a persona
+    sweep in which all three personas chose identically -- an artifact, not a
+    finding."""
+
+    def test_scaling_is_proportional_to_headcount(self):
+        half = RONNE_2024.scaled_to(17)  # half of 34 FTE
+        self.assertAlmostEqual(half.revenue_dkk, RONNE_2024.revenue_dkk / 2, places=2)
+        self.assertAlmostEqual(half.ebitda_dkk, RONNE_2024.ebitda_dkk / 2, places=2)
+        self.assertEqual(half.employees_fte, 17)
+
+    def test_scaling_to_own_size_is_a_no_op(self):
+        same = RONNE_2024.scaled_to(RONNE_2024.employees_fte)
+        self.assertAlmostEqual(same.revenue_eur, RONNE_2024.revenue_eur, places=6)
+        self.assertEqual(same.annual_calls, RONNE_2024.annual_calls)
+
+    def test_smaller_port_has_a_lower_hourly_outage_cost(self):
+        """The whole point: a ten-person port does not merely spend less on
+        incident response, it earns less per hour of downtime too."""
+        small = OutageCostPerHour(RONNE_2024.scaled_to(10))
+        large = OutageCostPerHour(RONNE_2024.scaled_to(100))
+        self.assertLess(small.mean, large.mean)
+        self.assertAlmostEqual(large.mean / small.mean, 10.0, places=4)
+
+    def test_revenue_per_call_is_preserved_under_scaling(self):
+        """Linear scaling of both revenue and calls should leave the per-call
+        figure unchanged -- a check that the proxy is at least self-consistent."""
+        scaled = RONNE_2024.scaled_to(68)  # double
+        self.assertAlmostEqual(scaled.revenue_per_call_eur,
+                               RONNE_2024.revenue_per_call_eur, delta=100)
+
+    def test_calls_never_round_to_zero(self):
+        tiny = RONNE_2024.scaled_to(1)
+        self.assertGreaterEqual(tiny.annual_calls, 1)
+
+    def test_scaled_source_records_the_assumption(self):
+        """Linear scaling by headcount is a crude proxy for a capital-intensive
+        industry. It must say so where anyone reading the figures will see it."""
+        scaled = RONNE_2024.scaled_to(10)
+        self.assertIn("Proxy", scaled.source)
+        self.assertIn("Linear scale", scaled.source)
+
+    def test_rejects_non_positive_headcount(self):
+        with self.assertRaises(ValueError):
+            RONNE_2024.scaled_to(0)
+        with self.assertRaises(ValueError):
+            RONNE_2024.scaled_to(-5)

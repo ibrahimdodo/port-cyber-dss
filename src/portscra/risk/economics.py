@@ -76,6 +76,41 @@ class PortEconomics:
     def ebitda_margin(self) -> float:
         return self.ebitda_dkk / self.revenue_dkk
 
+    def scaled_to(self, employees: int) -> "PortEconomics":
+        """A hypothetical port of a different size, scaled from this one.
+
+        The brief specifies 10, 50 and 100-employee personas. Rønne Havn employs
+        34, so those personas bracket the real case rather than describing it,
+        and comparing them requires scaling the economics -- not only the
+        response costs. A ten-person port does not merely spend less on incident
+        response; it earns less per hour of downtime too, and holding revenue
+        fixed while scaling costs produced a persona sweep that showed no
+        difference at all, which was an artifact rather than a finding.
+
+        Revenue, EBITDA and calls scale linearly with headcount. That is a crude
+        proxy and worth challenging: ports are capital-intensive, so revenue per
+        employee varies widely with automation and business mix, and a small
+        port is unlikely to be a linear shrink of a larger one. It is defensible
+        as a first approximation and stated here rather than buried.
+        """
+        if employees <= 0:
+            raise ValueError(f"employees must be positive, got {employees}")
+
+        factor = employees / self.employees_fte
+        return PortEconomics(
+            name=f"{self.name} scaled to {employees} FTE",
+            year=self.year,
+            revenue_dkk=self.revenue_dkk * factor,
+            ebitda_dkk=self.ebitda_dkk * factor,
+            annual_calls=max(1, round(self.annual_calls * factor)),
+            employees_fte=employees,
+            source=(
+                f"Linear scale from {self.name} ({self.employees_fte} FTE) by "
+                f"headcount ratio {factor:.2f}. Proxy only -- revenue per "
+                f"employee varies widely across ports. Original: {self.source}"
+            ),
+        )
+
 
 #: Rønne Havn A/S, from the 2024 annual report (five-year key figures, page 22)
 #: and Danmarks Statistik SKIB101 for the call count. Local copy of the report
