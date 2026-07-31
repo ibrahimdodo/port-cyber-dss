@@ -89,6 +89,47 @@ def residual_ale(
     return total
 
 
+def apply_controls(
+    scenarios: list[Scenario], controls: tuple[Control, ...] | list[Control]
+) -> list[Scenario]:
+    """Return the scenarios as they stand once a portfolio is in place.
+
+    Frequency and magnitude distributions are scaled by their residual factors,
+    producing a set of scenarios that can be simulated to get the *distribution*
+    of residual risk rather than only its mean. That distinction matters: the
+    optimiser searches on means for speed, but the tail is what the port is
+    actually buying protection against.
+
+    Scaling goes through `Distribution.scale`, so this works for derived
+    vendor-driven frequencies as well as plain three-point estimates.
+    """
+    from ..risk.montecarlo import LossMagnitude, Scenario as _Scenario
+
+    adjusted = []
+    for scenario in scenarios:
+        freq_factor, mag_factor = _residual_factors(scenario.id, controls)
+        lm = scenario.loss_magnitude
+        adjusted.append(
+            _Scenario(
+                id=scenario.id,
+                name=scenario.name,
+                loss_event_frequency=scenario.loss_event_frequency.scale(freq_factor),
+                loss_magnitude=LossMagnitude(
+                    downtime_hours=lm.downtime_hours.scale(mag_factor),
+                    cost_per_hour=lm.cost_per_hour,
+                    response_cost=lm.response_cost.scale(mag_factor),
+                    secondary_loss=lm.secondary_loss,
+                    secondary_probability=lm.secondary_probability * mag_factor,
+                ),
+                enisa_threat=scenario.enisa_threat,
+                attack_techniques=scenario.attack_techniques,
+                stride=scenario.stride,
+                notes=scenario.notes,
+            )
+        )
+    return adjusted
+
+
 @dataclass(frozen=True)
 class Portfolio:
     """A selected set of controls and what it buys."""

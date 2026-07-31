@@ -163,6 +163,18 @@ The AHP demo session returns CR = 0.044 (acceptable) and weights that closely tr
 
 **Tornado sensitivity** ranks C20 (incident response) and C01 (MFA) as the estimates most worth researching before committing budget, and C10 (asset inventory) as one whose exact effectiveness does not change the decision.
 
+5j. **Dependency graph built — the pipeline is now connected (2026-07-31).** Audit before starting found a real architectural gap: the vendor engine's output was consumed by nothing. `build_scenarios()` took only `cost_per_hour` and used hardcoded frequencies, and the `supplies` field linking vendors to assets was populated but never read. Two good engines side by side, not one pipeline.
+
+**`src/portscra/graph.py`** adds the vendor → asset → port service join, six ENISA-informed port services with revenue shares summing to 1, and `build_scenarios_from_vendors()`, which replaces generic priors with frequencies derived from the port's own supplier list. Also added `Distribution.scale()` so residual factors apply polymorphically — without it every caller reaches for `PERT(d.minimum * f, …)`, which breaks the moment a frequency stops being a plain three-point estimate.
+
+Two modelling decisions to defend: **frequencies add** (loss event frequency is a Poisson rate, so contributions from several vendors sum — treating them as probabilities would be wrong), and **a vendor contributes in proportion to its coverage** of a scenario's target assets (a proxy, and the assumption in the module most worth challenging). A scenario with no listed supplier keeps its generic prior rather than going to zero — otherwise "forget to write the vendor down" becomes the cheapest way to reduce measured risk.
+
+**Concentration analysis is the graph's own contribution**, independent of the frequency work: ranking suppliers by *revenue exposed* rather than security posture puts the crane OEM at 80% and the MSP at 75%. That is a property of the topology — a supplier touching everything is a concentration risk even if it is well run — and no per-vendor score can express it.
+
+**Derived frequencies differ substantially from the priors**: trojanized update 0.028 → 0.062 (2.2×), OT compromise 0.068 → 0.129 (1.9×), while SaaS takeover falls 0.350 → 0.112 and vendor data breach 0.183 → 0.046. The generic priors were wrong in both directions for this port.
+
+**A methodological near-miss worth recording.** The first version of `demo_pipeline.py` compared portfolios at the single default budget of €25,000, found them identical, and concluded the recommendation was "robust to how the frequencies were obtained". A sweep showed that was a coincidence of that budget: **the two bases disagree at 5 of 8 budget levels**, and in the direction the frequency shifts predict — the derived basis buys staged update testing (C12) earlier and payment verification (C14) later. Corrected to sweep rather than sample. The general lesson for the report: a comparison at one parameter value is an anecdote, and this project has now produced two conclusions that reversed under a sweep.
+
 6. **Scope reshaped for solo build** — vertical slice first: 100-mixed persona, ~10 vendors, 7 scenarios, full pipeline (inventory → likelihood → consequence → Monte Carlo → optimizer → dashboard). **Backlog (build only after the slice works end-to-end):** awareness module, SimPy outage simulation, 10/50 persona calibration, SBOM ingestion.
 7. **Portfolio-grade deliverable standards**: README as the report (architecture diagram, methodology, screenshots), reproducible pipeline (scripts + one bundled sample-day extract so others can run without the 17 GB download), tests on the Monte Carlo core and optimizer, deployed demo on HF Spaces.
 

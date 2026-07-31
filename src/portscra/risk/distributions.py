@@ -31,6 +31,17 @@ class Distribution:
     def mean(self) -> float:
         raise NotImplementedError
 
+    def scale(self, factor: float) -> "Distribution":
+        """Return this distribution multiplied by a constant.
+
+        Needed so that applying a control's residual factor works on any
+        distribution, not only PERT. Without it, callers reach for
+        `PERT(d.minimum * f, ...)` and silently break the moment a frequency
+        stops being a plain three-point estimate -- which is exactly what
+        happens once frequencies are derived from a vendor list.
+        """
+        raise NotImplementedError
+
 
 @dataclass(frozen=True)
 class Constant(Distribution):
@@ -46,6 +57,11 @@ class Constant(Distribution):
     @property
     def mean(self) -> float:
         return float(self.value)
+
+    def scale(self, factor: float) -> "Constant":
+        if factor < 0:
+            raise ValueError(f"scale factor must not be negative, got {factor}")
+        return Constant(self.value * factor, self.source)
 
 
 @dataclass(frozen=True)
@@ -116,6 +132,23 @@ class PERT(Distribution):
     @property
     def mean(self) -> float:
         return (self.minimum + self.lam * self.most_likely + self.maximum) / (self.lam + 2.0)
+
+    def scale(self, factor: float) -> "PERT":
+        """Multiply the estimate by a constant, preserving its shape and source.
+
+        Linear scaling of all three points keeps the distribution a PERT with
+        the same relative skew, which is the behaviour wanted when a control
+        removes a proportion of a frequency or duration.
+        """
+        if factor < 0:
+            raise ValueError(f"scale factor must not be negative, got {factor}")
+        return PERT(
+            self.minimum * factor,
+            self.most_likely * factor,
+            self.maximum * factor,
+            self.lam,
+            self.source,
+        )
 
     def __str__(self) -> str:
         src = f" [{self.source}]" if self.source else ""

@@ -7,7 +7,7 @@ A decision support system that answers two questions for a port too small to hav
 
 Every accessible tool in this space — [CISA CSET](https://www.cisa.gov/resources-tools/services/cyber-security-evaluation-tool-csetr), [MONARC](https://www.monarc.lu/), SimpleRisk — stops at a qualitative heat map. Commercial platforms (BitSight, SecurityScorecard, UpGuard) are black-box, enterprise-priced and port-blind. This project quantifies instead, in the port's own operational terms, and then optimises the spend.
 
-> **Status: in development.** The full analytical chain is built and tested — ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, and the budget-constrained control optimiser. The Streamlit dashboard is next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
+> **Status: in development.** The full analytical chain is built, connected and tested — ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, dependency graph and the budget-constrained control optimiser. Validation and the Streamlit dashboard are next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
 
 ---
 
@@ -58,6 +58,9 @@ python scripts/demo_vendors.py --nis2    # NIS2 Article 21 coverage
 python scripts/demo_optimise.py --budget 25000
 python scripts/demo_optimise.py --ig 1   # essential cyber hygiene only
 
+# The whole chain: suppliers → graph → derived frequencies → portfolio
+python scripts/demo_pipeline.py
+
 # Tests
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
@@ -101,6 +104,14 @@ Seven of the eight selected controls are CIS Implementation Group 1 — "essenti
 
 The efficient frontier shows where spending stops paying: **ROSI turns negative at full-catalogue spend (−0.3×)**. Buying everything is worse than buying the right subset, which is the sort of finding a compliance checklist structurally cannot produce.
 
+### Does assessing suppliers actually change anything?
+
+That question deserves a test rather than an assertion, so `demo_pipeline.py` runs the same port and budget twice — once with generic scenario frequencies, once with frequencies derived from its actual suppliers — and sweeps across budgets, because agreement at any single budget would be coincidence.
+
+**They disagree at 5 of 8 budget levels**, and in the right direction: the derived basis finds trojanized updates ~2× more likely than the generic prior and invoice fraud ~3× less likely, so it buys staged update testing earlier and payment verification later.
+
+The graph also answers a question no per-vendor score can. Ranking suppliers by *revenue exposed* rather than by security posture puts the crane OEM at 80% and the MSP at 75% — concentration is a property of the topology, and a supplier touching everything is a risk even when it is well run.
+
 ## Layout
 
 | Path | Contents |
@@ -108,10 +119,11 @@ The efficient frontier shows where spending stops paying: **ROSI turns negative 
 | `src/portscra/risk/` | PERT distributions, FAIR Monte Carlo engine, port economics |
 | `src/portscra/vendor/` | NIS2-mapped questionnaire, AHP weighting, likelihood fusion |
 | `src/portscra/controls/` | CIS Controls v8 catalogue, knapsack optimiser, tornado sensitivity |
+| `src/portscra/graph.py` | Dependency graph: vendor → asset → port service, derived frequencies |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
-| `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py` |
-| `tests/` | 183 tests, stdlib `unittest`, no external runner needed |
+| `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py` |
+| `tests/` | 215 tests, stdlib `unittest`, no external runner needed |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 

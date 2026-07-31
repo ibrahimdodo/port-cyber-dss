@@ -25,6 +25,7 @@ import numpy as np  # noqa: E402
 
 from portscra.controls import (  # noqa: E402
     CATALOGUE,
+    apply_controls,
     catalogue_for_group,
     efficient_frontier,
     optimise,
@@ -74,38 +75,7 @@ def main() -> int:
 
     # The mean drove the search; the distribution is what justifies the spend.
     print("\n--- what it does to the distribution ---")
-    residual_scenarios = []
-    for scenario in scenarios:
-        from portscra.controls.optimiser import _residual_factors
-        from portscra.risk.distributions import PERT
-        from portscra.risk.montecarlo import LossMagnitude, Scenario
-
-        freq_factor, mag_factor = _residual_factors(scenario.id, portfolio.controls)
-        lef = scenario.loss_event_frequency
-        lm = scenario.loss_magnitude
-        residual_scenarios.append(
-            Scenario(
-                id=scenario.id, name=scenario.name,
-                loss_event_frequency=PERT(
-                    lef.minimum * freq_factor, lef.most_likely * freq_factor,
-                    lef.maximum * freq_factor, source=lef.source),
-                loss_magnitude=LossMagnitude(
-                    downtime_hours=PERT(
-                        lm.downtime_hours.minimum * mag_factor,
-                        lm.downtime_hours.most_likely * mag_factor,
-                        lm.downtime_hours.maximum * mag_factor,
-                        source=lm.downtime_hours.source),
-                    cost_per_hour=lm.cost_per_hour,
-                    response_cost=PERT(
-                        lm.response_cost.minimum * mag_factor,
-                        lm.response_cost.most_likely * mag_factor,
-                        lm.response_cost.maximum * mag_factor,
-                        source=lm.response_cost.source),
-                    secondary_loss=lm.secondary_loss,
-                    secondary_probability=lm.secondary_probability * mag_factor,
-                ),
-            )
-        )
+    residual_scenarios = apply_controls(scenarios, portfolio.controls)
 
     before = simulate(scenarios, iterations=args.iterations, seed=42)["__portfolio__"]
     after = simulate(residual_scenarios, iterations=args.iterations, seed=42)["__portfolio__"]

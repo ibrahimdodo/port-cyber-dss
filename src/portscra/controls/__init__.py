@@ -10,6 +10,7 @@ from .catalogue import (
 )
 from .optimiser import (
     Portfolio,
+    apply_controls,
     baseline_ale,
     efficient_frontier,
     exhaustive_optimise,
@@ -22,6 +23,6 @@ from .optimiser import (
 __all__ = [
     "CATALOGUE", "Control", "ControlEffect",
     "catalogue_for_group", "find_control", "total_cost",
-    "Portfolio", "optimise", "exhaustive_optimise", "efficient_frontier",
+    "Portfolio", "apply_controls", "optimise", "exhaustive_optimise", "efficient_frontier",
     "baseline_ale", "residual_ale", "scenario_ale", "tornado",
 ]
