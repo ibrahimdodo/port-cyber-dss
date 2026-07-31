@@ -60,10 +60,36 @@ class LossMagnitude:
     response_cost: Distribution
     secondary_loss: Distribution | None = None
     secondary_probability: float = 0.0
+    #: Probability that the event disrupts *operations* at all, as opposed to
+    #: hitting IT while the quay keeps working.
+    #:
+    #: Added in response to a validation failure rather than by design. Held-out
+    #: incident replay showed Barcelona and San Diego (both 2018) suffered
+    #: ransomware with no reported effect on vessel operations, an outcome the
+    #: model could not produce because its downtime estimate had a floor of 24
+    #: hours. Separating "an incident happened" from "operations stopped" is the
+    #: faithful fix; simply lowering the floor would have blurred two distinct
+    #: things together.
+    disruption_probability: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not 0.0 <= self.disruption_probability <= 1.0:
+            raise ValueError(
+                f"disruption_probability must be in [0, 1], "
+                f"got {self.disruption_probability}"
+            )
+
+    def sample_downtime(self, rng: np.random.Generator, size: int) -> np.ndarray:
+        """Effective operational downtime, after the disruption gate."""
+        hours = self.downtime_hours.sample(rng, size)
+        if self.disruption_probability >= 1.0:
+            return hours
+        disrupts = rng.random(size) < self.disruption_probability
+        return np.where(disrupts, hours, 0.0)
 
     def sample(self, rng: np.random.Generator, size: int) -> dict[str, np.ndarray]:
         """Draw `size` event magnitudes, returning each component separately."""
-        hours = self.downtime_hours.sample(rng, size)
+        hours = self.sample_downtime(rng, size)
         rate = self.cost_per_hour.sample(rng, size)
         outage = hours * rate
         response = self.response_cost.sample(rng, size)

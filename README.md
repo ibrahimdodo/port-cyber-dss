@@ -7,7 +7,7 @@ A decision support system that answers two questions for a port too small to hav
 
 Every accessible tool in this space — [CISA CSET](https://www.cisa.gov/resources-tools/services/cyber-security-evaluation-tool-csetr), [MONARC](https://www.monarc.lu/), SimpleRisk — stops at a qualitative heat map. Commercial platforms (BitSight, SecurityScorecard, UpGuard) are black-box, enterprise-priced and port-blind. This project quantifies instead, in the port's own operational terms, and then optimises the spend.
 
-> **Status: in development.** The full analytical chain is built, connected and tested — ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, dependency graph and the budget-constrained control optimiser. Validation and the Streamlit dashboard are next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
+> **Status: in development.** The full analytical chain is built, connected and validated — ENISA taxonomies, AIS pipeline, port economics, FAIR Monte Carlo, vendor likelihood, dependency graph, control optimiser and a validation suite that replays real incidents and duels a 5×5 matrix. The Streamlit dashboard is next. See [PLANNING.md](PLANNING.md) for the full design rationale, the solution landscape survey, and the rejected alternatives.
 
 ---
 
@@ -61,6 +61,9 @@ python scripts/demo_optimise.py --ig 1   # essential cyber hygiene only
 # The whole chain: suppliers → graph → derived frequencies → portfolio
 python scripts/demo_pipeline.py
 
+# Validation: incident replay, 5x5 matrix duel, persona sweep
+python scripts/validate.py
+
 # Tests
 PYTHONPATH=src python3 -m unittest discover -s tests
 ```
@@ -112,6 +115,24 @@ That question deserves a test rather than an assertion, so `demo_pipeline.py` ru
 
 The graph also answers a question no per-vendor score can. Ranking suppliers by *revenue exposed* rather than by security posture puts the crane OEM at 80% and the MSP at 75% — concentration is a property of the topology, and a supplier touching everything is a risk even when it is well run.
 
+### Does the model tell the truth?
+
+`validate.py` replays six documented port incidents, keeping the two that *set* the estimates separate from four held out — checking a model against the data used to build it is a consistency check, not a validation.
+
+**The first run failed 2 of 4, and the failure was the most useful thing the project has produced.** Barcelona and San Diego (both 2018) suffered ransomware *without stopping the quay*: IT was hit, ships kept working. The downtime estimate had a floor of 24 hours and could not produce that outcome at any percentile — the model was asserting that supplier-borne ransomware always becomes an operational outage.
+
+The fix was structural rather than a parameter nudge: `disruption_probability` now separates "an incident happened" from "operations stopped", set to 0.67 from the evidence (4 of 6 incidents disrupted operations). Replay passes 4 of 4, and the sharper check matches too — **the model predicts 33% of ransomware events cause no operational downtime; 2 of 6 documented incidents (33%) had none.**
+
+### Is it better than a heat map?
+
+Same scenarios, same budget, both methods. The result is more interesting than "matrix bad":
+
+- **Rank agreement +0.91** — the 5×5 matrix orders risks perfectly sensibly.
+- **6 of 7 scenarios land in "Medium", spanning 4.2× in expected loss** — Cox's range compression, made concrete.
+- **The optimiser wins at every budget tested**, by €1.6k–18.9k/yr, peaking at +17% of baseline at €15,000.
+
+*A matrix can rank well and still allocate badly*, because it cannot see that a cheap control touching four amber risks beats an expensive one touching a single red. The test suite asserts rank agreement > 0.5 so the baseline stays a fair opponent rather than a straw man.
+
 ## Layout
 
 | Path | Contents |
@@ -120,10 +141,11 @@ The graph also answers a question no per-vendor score can. Ranking suppliers by 
 | `src/portscra/vendor/` | NIS2-mapped questionnaire, AHP weighting, likelihood fusion |
 | `src/portscra/controls/` | CIS Controls v8 catalogue, knapsack optimiser, tornado sensitivity |
 | `src/portscra/graph.py` | Dependency graph: vendor → asset → port service, derived frequencies |
+| `src/portscra/validation.py` | Incident replay, 5×5 matrix baseline, range compression |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
-| `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py` |
-| `tests/` | 215 tests, stdlib `unittest`, no external runner needed |
+| `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
+| `tests/` | 236 tests, stdlib `unittest`, no external runner needed |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 

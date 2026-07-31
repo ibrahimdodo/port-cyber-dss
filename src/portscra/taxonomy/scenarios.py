@@ -222,7 +222,7 @@ def build_scenarios(
 
     templates = {t.id: t for t in SCENARIO_TEMPLATES}
 
-    def make(sid, lef, hours, response, secondary, secondary_p):
+    def make(sid, lef, hours, response, secondary, secondary_p, disruption_p=1.0):
         t = templates[sid]
         return Scenario(
             id=sid,
@@ -234,6 +234,7 @@ def build_scenarios(
                 response_cost=response,
                 secondary_loss=secondary,
                 secondary_probability=secondary_p,
+                disruption_probability=disruption_p,
             ),
             enisa_threat=", ".join(t.enisa_threats),
             attack_techniques=t.attack_techniques,
@@ -253,6 +254,11 @@ def build_scenarios(
             eur(20_000, 80_000, 400_000, "IR retainer, forensics, rebuild of affected systems."),
             eur(10_000, 50_000, 250_000, "NIS2 penalty exposure and notification costs."),
             0.30,
+            # Receiving a trojanized update is not the same as being operationally
+            # disrupted by it: of the ~18,000 organisations that installed the
+            # SolarWinds backdoor, only a small minority were actively exploited,
+            # and the harm to those was mostly espionage rather than outage.
+            disruption_p=0.50,
         ),
         make(
             "S2",
@@ -266,6 +272,12 @@ def build_scenarios(
             eur(30_000, 120_000, 600_000, "Recovery, overtime, hardware replacement, ransom advice."),
             eur(15_000, 60_000, 300_000, "Regulatory penalty, customer compensation, liner switching."),
             0.35,
+            # Set from held-out incident replay, which caught the model asserting
+            # that ransomware always stops the quay. Of six documented port
+            # ransomware incidents, four disrupted operations (Nagoya, DP World,
+            # COSCO, Transnet) and two did not (Barcelona and San Diego, both
+            # 2018, where IT was hit while vessel operations continued). 4/6.
+            disruption_p=0.67,
         ),
         make(
             "S3",

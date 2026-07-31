@@ -47,7 +47,7 @@ def scenario_ale(scenario: Scenario) -> float:
     """
     lm = scenario.loss_magnitude
     per_event = (
-        lm.downtime_hours.mean * lm.cost_per_hour.mean
+        lm.downtime_hours.mean * lm.disruption_probability * lm.cost_per_hour.mean
         + lm.response_cost.mean
         + (lm.secondary_loss.mean * lm.secondary_probability
            if lm.secondary_loss is not None else 0.0)
@@ -120,6 +120,7 @@ def apply_controls(
                     response_cost=lm.response_cost.scale(mag_factor),
                     secondary_loss=lm.secondary_loss,
                     secondary_probability=lm.secondary_probability * mag_factor,
+                    disruption_probability=lm.disruption_probability,
                 ),
                 enisa_threat=scenario.enisa_threat,
                 attack_techniques=scenario.attack_techniques,
