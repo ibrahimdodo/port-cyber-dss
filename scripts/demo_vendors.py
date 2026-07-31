@@ -17,102 +17,28 @@ Usage
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "src"))
+if importlib.util.find_spec("portscra") is None:  # not pip-installed; run in place
+    sys.path.insert(0, str(REPO / "src"))
 
+from portscra.examples import EXAMPLE_VENDORS  # noqa: E402
 from portscra.vendor import (  # noqa: E402
     CRITERIA,
     DEFAULT_WEIGHTS,
     LikelihoodModel,
-    Vendor,
-    VendorSignals,
     matrix_from_comparisons,
     nis2_coverage,
     weights_from_matrix,
 )
 
 
-def a(**kwargs) -> dict[str, int]:
-    """Shorthand: a(Q1=0, Q2=3) -> {"Q1": 0, "Q2": 3}."""
-    return dict(kwargs)
-
-
-#: A plausible supplier list for a port of Rønne's size and mix.
-VENDORS = [
-    Vendor(
-        "msp", "Managed service provider (outsourced IT)", "MSP",
-        supplies=("workstations", "servers", "networks", "corporate_systems"),
-        answers=a(Q1=0, Q2=1, Q3=1, Q4=1, Q5=1, Q6=3, Q7=1, Q8=1, Q9=1, Q10=1,
-                  Q11=1, Q12=1, Q13=0, Q14=1, Q15=3, Q16=2, Q17=1, Q18=2, Q19=1, Q20=1),
-        notes="Holds standing administrative access to the whole estate. For a "
-              "port with no in-house security function this is the single "
-              "largest concentration of risk -- the Kaseya shape.",
-    ),
-    Vendor(
-        "tos", "Terminal operating system vendor", "software",
-        supplies=("tos",),
-        answers=a(Q1=1, Q2=2, Q3=2, Q4=0, Q5=0, Q6=2, Q7=3, Q8=2, Q9=2, Q10=2,
-                  Q11=1, Q12=1, Q13=1, Q14=2, Q15=3, Q16=2, Q17=1, Q18=2, Q19=0, Q20=0),
-        signals=VendorSignals(max_epss=0.12, source="illustrative"),
-        notes="Operations stop without it and replacement would take years. "
-              "The SolarWinds vector runs through its update channel.",
-    ),
-    Vendor(
-        "cloud_office", "Cloud productivity and email suite", "SaaS",
-        supplies=("cloud", "corporate_systems", "commercial_financial"),
-        answers=a(Q1=2, Q2=3, Q3=3, Q4=2, Q5=2, Q6=3, Q7=3, Q8=3, Q9=3, Q10=2,
-                  Q11=3, Q12=1, Q13=2, Q14=3, Q15=2, Q16=3, Q17=0, Q18=2, Q19=2, Q20=2),
-        notes="Strong posture, but holds the mailboxes through which invoices "
-              "are agreed -- the business email compromise path.",
-    ),
-    Vendor(
-        "crane_oem", "Crane and handling equipment OEM", "OT",
-        supplies=("loading_unloading", "ics"),
-        answers=a(Q1=1, Q2=0, Q3=0, Q4=1, Q5=1, Q6=0, Q7=1, Q8=0, Q9=0, Q10=1,
-                  Q11=0, Q12=0, Q13=0, Q14=0, Q15=3, Q16=0, Q17=2, Q18=0, Q19=0, Q20=0),
-        notes="Remote diagnostics into safety-relevant equipment, minimal "
-              "security programme. Typical of OT suppliers to small ports.",
-    ),
-    Vendor(
-        "gate_cctv", "Gate, ANPR and CCTV integrator", "OT",
-        supplies=("access_control", "detection", "portuary_infrastructure"),
-        answers=a(Q1=1, Q2=1, Q3=1, Q4=1, Q5=1, Q6=1, Q7=0, Q8=0, Q9=0, Q10=1,
-                  Q11=0, Q12=0, Q13=0, Q14=0, Q15=1, Q16=1, Q17=1, Q18=1, Q19=2, Q20=2),
-        signals=VendorSignals(kev_count=1, max_epss=0.35, source="illustrative"),
-        notes="The least-patched estate in most ports; the Antwerp "
-              "container-release manipulation ran through this class of system.",
-    ),
-    Vendor(
-        "pcs", "Port community system operator", "platform",
-        supplies=("pcs", "mandatory_declarations", "operational_data"),
-        answers=a(Q1=2, Q2=2, Q3=2, Q4=1, Q5=1, Q6=3, Q7=2, Q8=2, Q9=2, Q10=2,
-                  Q11=2, Q12=2, Q13=1, Q14=2, Q15=3, Q16=2, Q17=0, Q18=2, Q19=0, Q20=1),
-        notes="Shared across many ports, so one compromise reaches all of them. "
-              "Holds crew and passenger declarations.",
-    ),
-    Vendor(
-        "booking", "Ferry booking and check-in platform", "SaaS",
-        supplies=("corporate_systems", "commercial_financial"),
-        answers=a(Q1=2, Q2=2, Q3=2, Q4=1, Q5=1, Q6=3, Q7=2, Q8=1, Q9=1, Q10=1,
-                  Q11=1, Q12=2, Q13=1, Q14=1, Q15=1, Q16=2, Q17=0, Q18=2, Q19=1, Q20=1),
-        signals=VendorSignals(recent_breach=True, source="illustrative"),
-        notes="Holds passenger personal data at volume -- GDPR and NIS2 exposure.",
-    ),
-    Vendor(
-        "oss_lib", "Open-source component in supplied software", "freeware",
-        supplies=("servers", "workstations"),
-        # No questionnaire is possible: there is no vendor to send it to. This
-        # is the brief's "freeware?" case, and the reason external signals are
-        # not optional.
-        signals=VendorSignals(openssf_scorecard=3.2, max_epss=0.08,
-                              source="illustrative OpenSSF Scorecard"),
-        notes="Nobody to send a questionnaire to. Assessed entirely on public "
-              "signals; the xz-utils backdoor was this shape.",
-    ),
-]
+#: Imported from the package so the dashboard and any notebook can use the
+#: same list without importing data out of a script.
+VENDORS = EXAMPLE_VENDORS
 
 
 def run_ahp_demo() -> dict[str, float]:

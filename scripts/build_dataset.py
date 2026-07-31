@@ -32,7 +32,8 @@ import traceback
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "src"))
+if importlib.util.find_spec("portscra") is None:  # not pip-installed; run in place
+    sys.path.insert(0, str(REPO / "src"))
 
 import pandas as pd  # noqa: E402
 

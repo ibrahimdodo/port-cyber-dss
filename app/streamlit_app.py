@@ -12,13 +12,13 @@ Run with:
 
 from __future__ import annotations
 
+import importlib.util
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "src"))
-sys.path.insert(0, str(REPO / "scripts"))
-
+if importlib.util.find_spec("portscra") is None:  # not pip-installed; run in place
+    sys.path.insert(0, str(REPO / "src"))
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 import streamlit as st  # noqa: E402
@@ -49,9 +49,9 @@ from portscra.validation import (  # noqa: E402
     rank_agreement,
     replay_incident,
 )
+from portscra.examples import EXAMPLE_VENDORS as VENDORS  # noqa: E402
 from portscra.vendor import CRITERIA, DEFAULT_WEIGHTS, LikelihoodModel  # noqa: E402
 
-from demo_vendors import VENDORS  # noqa: E402
 
 st.set_page_config(page_title="PortSCRA", page_icon="⚓", layout="wide")
 

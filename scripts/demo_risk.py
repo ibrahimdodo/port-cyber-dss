@@ -17,13 +17,15 @@ Usage
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 from pathlib import Path
 
 import numpy as np
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "src"))
+if importlib.util.find_spec("portscra") is None:  # not pip-installed; run in place
+    sys.path.insert(0, str(REPO / "src"))
 
 from portscra.risk import (  # noqa: E402
     RONNE_2024,

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "portscra"
+version = "0.1.0"
+description = "Supply-chain cyber risk assessment for small EU ports"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Ibrahim Dodo" }]
+keywords = ["cybersecurity", "risk", "FAIR", "maritime", "NIS2", "ports"]
+
+dependencies = [
+    "numpy>=1.26",
+    "pandas>=2.0",
+    "pyarrow>=14.0",
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# The dashboard. Not needed to use the library or run the analysis scripts.
+app = ["streamlit>=1.30"]
+
+[project.urls]
+Repository = "https://github.com/ibrahim-desh/port-cyber-dss"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+portscra = ["py.typed"]

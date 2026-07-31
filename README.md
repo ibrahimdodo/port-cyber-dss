@@ -39,6 +39,10 @@ vendors ──> assets ──> port services        (dependency graph, ENISA tax
 ## What works today
 
 ```bash
+# Install (editable), so imports work from anywhere — including notebooks
+pip install -e .
+pip install -e ".[app]"    # adds Streamlit for the dashboard
+
 # Run the risk engine — no data download needed
 python scripts/demo_risk.py
 
@@ -145,11 +149,12 @@ Same scenarios, same budget, both methods. The result is more interesting than "
 | `src/portscra/controls/` | CIS Controls v8 catalogue, knapsack optimiser, tornado sensitivity |
 | `src/portscra/graph.py` | Dependency graph: vendor → asset → port service, derived frequencies |
 | `src/portscra/validation.py` | Incident replay, 5×5 matrix baseline, range compression |
+| `src/portscra/examples.py` | The worked example supplier list (illustrative roles, not real firms) |
 | `app/streamlit_app.py` | Dashboard: move the budget slider, watch the recommendation change |
 | `src/portscra/taxonomy/` | ENISA asset + threat taxonomies, scenario catalogue |
 | `src/portscra/ais/` | DMA AIS download, streaming filter, port-call detection, day-boundary stitching |
 | `scripts/` | `day_one.py`, `build_dataset.py`, `demo_risk.py`, `demo_vendors.py`, `demo_optimise.py`, `demo_pipeline.py`, `validate.py` |
-| `tests/` | 243 tests, stdlib `unittest`, no external runner needed |
+| `tests/` | 253 tests, stdlib `unittest`, no external runner needed |
 | `refs/` | ENISA 2019 + 2020 port cybersecurity reports, Rønne Havn 2024 annual report |
 | `PLANNING.md` | Design rationale, alternatives analysis, dataset comparison |
 
@@ -181,7 +186,15 @@ A [Kaggle AIS dataset near Tallinn](https://www.kaggle.com/datasets/gaborvisky/a
 
 ## Requirements
 
-Python 3.11+, numpy, scipy, pandas, pyarrow, requests. Everything currently implemented runs on those; see `requirements.txt` for the full set including planned dependencies.
+Python 3.11+, numpy, pandas, pyarrow, requests — plus Streamlit for the dashboard only. Install with `pip install -e .` (add `".[app]"` for the dashboard).
+
+The scripts also run without installing: each falls back to `src/` on the path if `portscra` is not importable. Installing is worth it for notebooks, where the fallback would have to be repeated in every session.
+
+```python
+from portscra.examples import EXAMPLE_VENDORS
+from portscra.graph import DependencyGraph, build_scenarios_from_vendors
+from portscra.controls import CATALOGUE, optimise
+```
 
 ## References
 

@@ -17,3 +17,6 @@ venv/
 
 # Local editor/preview config
 .claude/
+*.egg-info/
+build/
+dist/

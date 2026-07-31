@@ -22,11 +22,13 @@ Usage
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(REPO / "src"))
+if importlib.util.find_spec("portscra") is None:  # not pip-installed; run in place
+    sys.path.insert(0, str(REPO / "src"))
 
 from portscra.controls import CATALOGUE, apply_controls, optimise  # noqa: E402
 from portscra.graph import (  # noqa: E402
@@ -43,8 +45,7 @@ from portscra.taxonomy import build_scenarios  # noqa: E402
 from portscra.taxonomy.scenarios import SCENARIO_TEMPLATES  # noqa: E402
 from portscra.vendor import LikelihoodModel  # noqa: E402
 
-sys.path.insert(0, str(REPO / "scripts"))
-from demo_vendors import VENDORS  # noqa: E402
+from portscra.examples import EXAMPLE_VENDORS as VENDORS  # noqa: E402
 
 
 def eur(value: float) -> str:
