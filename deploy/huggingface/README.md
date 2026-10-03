@@ -8,7 +8,7 @@ sdk_version: 1.52.2
 app_file: app/streamlit_app.py
 pinned: false
 license: mit
-short_description: Quantified supply-chain cyber risk and budget-constrained control selection for a small EU port
+short_description: Supply-chain cyber risk for a small EU port
 ---
 
 # PortSCRA
